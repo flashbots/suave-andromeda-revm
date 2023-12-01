@@ -1,0 +1,17 @@
+[package]
+name = "witness-revm"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+futures = "0.3"
+ethers = "2.0.11"
+revm = { git = "ssh://git@github.com/flashbots/revm-andromeda.git", branch = "attest" }
+helios = { git = "https://github.com/a16z/helios", branch = "master" }
+common = { git = "https://github.com/a16z/helios", branch = "master" }
+execution = { git = "https://github.com/a16z/helios", branch = "master" }
+
+[patch."https://github.com/bluealloy/revm"]
+revm = { git = "ssh://git@github.com/flashbots/revm-andromeda.git", branch = "attest" }
