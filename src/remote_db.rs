@@ -1,10 +1,14 @@
+use tokio::runtime::Handle;
+
+use log::info;
+
+use ethers::prelude::Address as EthersAddress;
 use ethers::types::H256;
+
 use revm::db::{AccountState, CacheDB};
 use revm::primitives::{hash_map::Entry, AccountInfo, Address, Bytecode, Bytes, B256, U256};
 use revm::{Database, DatabaseRef};
-use tokio::runtime::Handle;
 
-use ethers::prelude::Address as EthersAddress;
 use execution::rpc::ExecutionRpc;
 use execution::ExecutionClient;
 use helios::types::BlockTag::{Latest, Number};
@@ -31,7 +35,7 @@ impl<R: ExecutionRpc> StateProvider for ExecutionClient<R> {
                 acc.code_hash.to_fixed_bytes().into(),
                 Bytecode::new_raw(Bytes::from_iter(acc.code.into_iter())),
             )),
-            Err(_) => Err(()),
+            Err(_err) => Err(()),
         }
     }
 

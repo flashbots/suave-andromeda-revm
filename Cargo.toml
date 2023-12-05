@@ -7,7 +7,9 @@ edition = "2021"
 
 [dependencies]
 tokio = "1.34.0"
+async-std = { version = "1", features = ["attributes", "tokio1"] }
 futures = "0.3"
+log = { version = "0.4", features = ["std"] }
 ethers = "2.0.11"
 revm = { git = "ssh://git@github.com/flashbots/revm-andromeda.git", branch = "attest" }
 helios = { git = "https://github.com/a16z/helios", branch = "master" }
