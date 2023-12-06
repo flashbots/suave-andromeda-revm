@@ -1,9 +1,8 @@
+use std::collections::HashMap;
 use tokio::runtime::Handle;
 
-use log::info;
-
 use ethers::prelude::Address as EthersAddress;
-use ethers::types::H256;
+use ethers::types::{H256 as EH256, U256 as EU256};
 
 use revm::db::{AccountState, CacheDB};
 use revm::primitives::{hash_map::Entry, AccountInfo, Address, Bytecode, Bytes, B256, U256};
@@ -15,32 +14,43 @@ use helios::types::BlockTag::{Latest, Number};
 
 pub trait StateProvider {
     type Error;
-    fn fetch_account(&mut self, address: Address) -> Result<AccountInfo, Self::Error>;
+    fn fetch_account(
+        &mut self,
+        address: Address,
+        slots: Option<&[EH256]>,
+    ) -> Result<(AccountInfo, HashMap<EH256, EU256>), Self::Error>;
     fn fetch_storage(&mut self, address: Address, index: U256) -> Result<U256, Self::Error>;
     fn fetch_block_hash(&mut self, number: U256) -> Result<B256, Self::Error>;
 }
 
 impl<R: ExecutionRpc> StateProvider for ExecutionClient<R> {
-    type Error = (); // TODO
+    type Error = StateProviderError;
 
-    fn fetch_account(&mut self, address: Address) -> Result<AccountInfo, Self::Error> {
+    fn fetch_account(
+        &mut self,
+        address: Address,
+        slots: Option<&[EH256]>,
+    ) -> Result<(AccountInfo, HashMap<EH256, EU256>), Self::Error> {
         match Handle::current().block_on(self.get_account(
             &EthersAddress::from_slice(address.as_slice()),
-            None,
+            slots,
             Latest,
         )) {
-            Ok(acc) => Ok(AccountInfo::new(
-                acc.balance.into(),
-                acc.nonce,
-                acc.code_hash.to_fixed_bytes().into(),
-                Bytecode::new_raw(Bytes::from_iter(acc.code.into_iter())),
+            Ok(acc) => Ok((
+                AccountInfo::new(
+                    acc.balance.into(),
+                    acc.nonce,
+                    acc.code_hash.to_fixed_bytes().into(),
+                    Bytecode::new_raw(Bytes::from_iter(acc.code.into_iter())),
+                ),
+                acc.slots,
             )),
-            Err(_err) => Err(()),
+            Err(err) => Err(StateProviderError::FetchFailed(err.to_string())),
         }
     }
 
     fn fetch_storage(&mut self, address: Address, index: U256) -> Result<U256, Self::Error> {
-        let slots = Box::new([H256::from_slice(index.as_le_slice())]);
+        let slots = Box::new([EH256::from_slice(index.as_le_slice())]);
         match Handle::current().block_on(self.get_account(
             &EthersAddress::from_slice(address.as_slice()),
             Some(slots.as_ref()),
@@ -48,26 +58,26 @@ impl<R: ExecutionRpc> StateProvider for ExecutionClient<R> {
         )) {
             Ok(acc) => {
                 if let Some(v) = acc.slots.get(&slots[0]) {
-                    let mut r: U256 = U256::ZERO;
-                    unsafe {
-                        // .....
-                        v.to_little_endian(r.as_le_slice_mut());
-                    }
-                    Ok(r)
+                    Ok(U256::from_limbs(v.0))
                 } else {
                     Ok(U256::ZERO)
                 }
             }
-            Err(_) => Err(()),
+            Err(err) => Err(StateProviderError::FetchFailed(err.to_string())),
         }
     }
 
     fn fetch_block_hash(&mut self, number: U256) -> Result<B256, Self::Error> {
         match Handle::current().block_on(self.get_block(Number(number.as_limbs()[0]), false)) {
             Ok(block) => Ok(B256::from_slice(block.hash.to_fixed_bytes().as_slice())),
-            Err(_) => Err(()),
+            Err(err) => Err(StateProviderError::FetchFailed(err.to_string())),
         }
     }
+}
+
+#[derive(Debug)]
+pub enum StateProviderError {
+    FetchFailed(String),
 }
 
 #[derive(Debug, Clone)]
@@ -76,11 +86,33 @@ pub struct RemoteDB<SP: StateProvider, ExtDB: DatabaseRef> {
     pub db: CacheDB<ExtDB>,
 }
 
-// TODO: Define API for fetching proofs!
-
 impl<SP: StateProvider, ExtDB: DatabaseRef> RemoteDB<SP, ExtDB> {
     pub fn new(state_provider: SP, db: CacheDB<ExtDB>) -> Self {
         Self { state_provider, db }
+    }
+
+    pub fn prefetch(
+        &mut self,
+        access_list: Vec<(Address, Option<&[EH256]>)>,
+    ) -> Result<(), SP::Error> {
+        for (addr, accessed_slots) in access_list {
+            match self.state_provider.fetch_account(addr, accessed_slots) {
+                Err(_) => {}
+                Ok((acc, slots)) => {
+                    self.db.insert_account_info(addr, acc);
+                    for (slot, value) in &slots {
+                        if let Err(_err) = self.db.insert_account_storage(
+                            addr,
+                            U256::from_le_slice(slot.as_bytes()),
+                            U256::from_limbs(value.0),
+                        ) {
+                            // wat do?
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -97,7 +129,7 @@ impl<SP: StateProvider, ExtDB: DatabaseRef> Database for RemoteDB<SP, ExtDB> {
         match self.db.accounts.entry(address) {
             Entry::Occupied(entry) => Ok(entry.into_mut().info()),
             Entry::Vacant(_) => {
-                if let Ok(acc) = self.state_provider.fetch_account(address) {
+                if let Ok((acc, _)) = self.state_provider.fetch_account(address, None) {
                     self.db.insert_account_info(address, acc);
                 }
                 self.db.basic(address)

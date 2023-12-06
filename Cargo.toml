@@ -11,10 +11,13 @@ async-std = { version = "1", features = ["attributes", "tokio1"] }
 futures = "0.3"
 log = { version = "0.4", features = ["std"] }
 ethers = "2.0.11"
-revm = { git = "ssh://git@github.com/flashbots/revm-andromeda.git", branch = "attest" }
+revm = { git = "ssh://git@github.com/flashbots/revm-andromeda.git", branch = "attest", features = ["serde"] }
 helios = { git = "https://github.com/a16z/helios", branch = "master" }
 common = { git = "https://github.com/a16z/helios", branch = "master" }
 execution = { git = "https://github.com/a16z/helios", branch = "master" }
+clap = { version = "4.4.11", features = ["derive"] }
+serde = "1.0.193"
+serde_json = "1.0.108"
 
 [patch."https://github.com/bluealloy/revm"]
 revm = { git = "ssh://git@github.com/flashbots/revm-andromeda.git", branch = "attest" }
