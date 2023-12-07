@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use tokio::runtime::Handle;
+use tokio::task::block_in_place;
 
 use ethers::prelude::Address as EthersAddress;
 use ethers::types::{H256 as EH256, U256 as EU256};
@@ -28,11 +29,13 @@ impl<R: ExecutionRpc> StateProvider for ExecutionClient<R> {
         address: Address,
         slots: Option<&[EH256]>,
     ) -> Result<(AccountInfo, HashMap<EH256, EU256>), StateProviderError> {
-        match Handle::current().block_on(self.get_account(
-            &EthersAddress::from_slice(address.as_slice()),
-            slots,
-            Latest,
-        )) {
+        match block_in_place(|| {
+            Handle::current().block_on(self.get_account(
+                &EthersAddress::from_slice(address.as_slice()),
+                slots,
+                Latest,
+            ))
+        }) {
             Ok(acc) => Ok((
                 AccountInfo::new(
                     acc.balance.into(),
@@ -48,11 +51,13 @@ impl<R: ExecutionRpc> StateProvider for ExecutionClient<R> {
 
     fn fetch_storage(&mut self, address: Address, index: U256) -> Result<U256, StateProviderError> {
         let slots = Box::new([EH256::from_slice(index.as_le_slice())]);
-        match Handle::current().block_on(self.get_account(
-            &EthersAddress::from_slice(address.as_slice()),
-            Some(slots.as_ref()),
-            Latest,
-        )) {
+        match block_in_place(|| {
+            Handle::current().block_on(self.get_account(
+                &EthersAddress::from_slice(address.as_slice()),
+                Some(slots.as_ref()),
+                Latest,
+            ))
+        }) {
             Ok(acc) => {
                 if let Some(v) = acc.slots.get(&slots[0]) {
                     Ok(U256::from_limbs(v.0))
@@ -65,7 +70,9 @@ impl<R: ExecutionRpc> StateProvider for ExecutionClient<R> {
     }
 
     fn fetch_block_hash(&mut self, number: U256) -> Result<B256, StateProviderError> {
-        match Handle::current().block_on(self.get_block(Number(number.as_limbs()[0]), false)) {
+        match block_in_place(|| {
+            Handle::current().block_on(self.get_block(Number(number.as_limbs()[0]), false))
+        }) {
             Ok(block) => Ok(B256::from_slice(block.hash.to_fixed_bytes().as_slice())),
             Err(err) => Err(StateProviderError::FetchFailed(err.to_string())),
         }
