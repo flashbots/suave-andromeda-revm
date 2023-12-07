@@ -24,8 +24,6 @@ use revm::{
 
 use ethers::utils as ethers_utils;
 
-use witness_revm::utils;
-
 #[derive(Parser)]
 struct Cli {
     /// The rpc endpoint to connect to
@@ -74,15 +72,8 @@ async fn main() {
         .expect("could not send current block");
 
     let res = spawn_blocking(move || {
-        let ethers_access_list = utils::revm_access_list_to_ethers(tx.access_list.clone());
-        let ethers_access_list_slices = Vec::from_iter(
-            ethers_access_list
-                .iter()
-                .map(|(addr, slots_vec)| (*addr, Some(slots_vec.as_slice()))),
-        );
-
         remote_db
-            .prefetch(ethers_access_list_slices)
+            .prefetch_from_revm_access_list(tx.access_list.clone())
             .expect("failed to prefetch state from access list");
         execute_tx(remote_db, tx)
     })

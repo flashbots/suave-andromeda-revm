@@ -13,24 +13,21 @@ use execution::ExecutionClient;
 use helios::types::BlockTag::{Latest, Number};
 
 pub trait StateProvider {
-    type Error;
     fn fetch_account(
         &mut self,
         address: Address,
         slots: Option<&[EH256]>,
-    ) -> Result<(AccountInfo, HashMap<EH256, EU256>), Self::Error>;
-    fn fetch_storage(&mut self, address: Address, index: U256) -> Result<U256, Self::Error>;
-    fn fetch_block_hash(&mut self, number: U256) -> Result<B256, Self::Error>;
+    ) -> Result<(AccountInfo, HashMap<EH256, EU256>), StateProviderError>;
+    fn fetch_storage(&mut self, address: Address, index: U256) -> Result<U256, StateProviderError>;
+    fn fetch_block_hash(&mut self, number: U256) -> Result<B256, StateProviderError>;
 }
 
 impl<R: ExecutionRpc> StateProvider for ExecutionClient<R> {
-    type Error = StateProviderError;
-
     fn fetch_account(
         &mut self,
         address: Address,
         slots: Option<&[EH256]>,
-    ) -> Result<(AccountInfo, HashMap<EH256, EU256>), Self::Error> {
+    ) -> Result<(AccountInfo, HashMap<EH256, EU256>), StateProviderError> {
         match Handle::current().block_on(self.get_account(
             &EthersAddress::from_slice(address.as_slice()),
             slots,
@@ -49,7 +46,7 @@ impl<R: ExecutionRpc> StateProvider for ExecutionClient<R> {
         }
     }
 
-    fn fetch_storage(&mut self, address: Address, index: U256) -> Result<U256, Self::Error> {
+    fn fetch_storage(&mut self, address: Address, index: U256) -> Result<U256, StateProviderError> {
         let slots = Box::new([EH256::from_slice(index.as_le_slice())]);
         match Handle::current().block_on(self.get_account(
             &EthersAddress::from_slice(address.as_slice()),
@@ -67,7 +64,7 @@ impl<R: ExecutionRpc> StateProvider for ExecutionClient<R> {
         }
     }
 
-    fn fetch_block_hash(&mut self, number: U256) -> Result<B256, Self::Error> {
+    fn fetch_block_hash(&mut self, number: U256) -> Result<B256, StateProviderError> {
         match Handle::current().block_on(self.get_block(Number(number.as_limbs()[0]), false)) {
             Ok(block) => Ok(B256::from_slice(block.hash.to_fixed_bytes().as_slice())),
             Err(err) => Err(StateProviderError::FetchFailed(err.to_string())),
@@ -91,10 +88,32 @@ impl<SP: StateProvider, ExtDB: DatabaseRef> RemoteDB<SP, ExtDB> {
         Self { state_provider, db }
     }
 
+    pub fn prefetch_from_revm_access_list(
+        &mut self,
+        access_list: Vec<(Address, Vec<U256>)>,
+    ) -> Result<(), StateProviderError> {
+        let ethers_slots_vec = Vec::from_iter(access_list.iter().map(|(addr, slots_vec)| {
+            let ethers_slots = Vec::from_iter(
+                slots_vec
+                    .iter()
+                    .map(|slot| EH256::from_slice(slot.as_le_slice())),
+            );
+            (*addr, ethers_slots)
+        }));
+
+        let ethers_access_list_slices = Vec::from_iter(
+            ethers_slots_vec
+                .iter()
+                .map(|(addr, slots_vec)| (*addr, Some(slots_vec.as_slice()))),
+        );
+
+        self.prefetch(ethers_access_list_slices)
+    }
+
     pub fn prefetch(
         &mut self,
         access_list: Vec<(Address, Option<&[EH256]>)>,
-    ) -> Result<(), SP::Error> {
+    ) -> Result<(), StateProviderError> {
         for (addr, accessed_slots) in access_list {
             match self.state_provider.fetch_account(addr, accessed_slots) {
                 Err(_) => {}
@@ -116,6 +135,12 @@ impl<SP: StateProvider, ExtDB: DatabaseRef> RemoteDB<SP, ExtDB> {
     }
 }
 
+#[derive(Debug)]
+pub enum RemoteDBError<DBError> {
+    State(StateProviderError),
+    Database(DBError),
+}
+
 /* Not needed and should not be called
 impl<ExtDB: DatabaseRef> DatabaseCommit for RemoteDB<ExtDB> {
     fn commit(&mut self, changes: HashMap<Address, Account>) {}
@@ -123,7 +148,7 @@ impl<ExtDB: DatabaseRef> DatabaseCommit for RemoteDB<ExtDB> {
 */
 
 impl<SP: StateProvider, ExtDB: DatabaseRef> Database for RemoteDB<SP, ExtDB> {
-    type Error = ExtDB::Error;
+    type Error = RemoteDBError<ExtDB::Error>;
 
     fn basic(&mut self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
         match self.db.accounts.entry(address) {
@@ -132,7 +157,11 @@ impl<SP: StateProvider, ExtDB: DatabaseRef> Database for RemoteDB<SP, ExtDB> {
                 if let Ok((acc, _)) = self.state_provider.fetch_account(address, None) {
                     self.db.insert_account_info(address, acc);
                 }
-                self.db.basic(address)
+
+                match self.db.basic(address) {
+                    Ok(info) => Ok(info),
+                    Err(err) => Err(RemoteDBError::Database(err)),
+                }
             }
         }
     }
@@ -141,7 +170,11 @@ impl<SP: StateProvider, ExtDB: DatabaseRef> Database for RemoteDB<SP, ExtDB> {
     fn code_by_hash(&mut self, code_hash: B256) -> Result<Bytecode, Self::Error> {
         // Make sure code is returned by basic()!
         // If for some reason it's not, adjust this function to separately fetch the code
-        self.db.code_by_hash(code_hash)
+
+        match self.db.code_by_hash(code_hash) {
+            Ok(info) => Ok(info),
+            Err(err) => Err(RemoteDBError::Database(err)),
+        }
     }
 
     // It is assumed that account is already loaded.
@@ -180,6 +213,7 @@ impl<SP: StateProvider, ExtDB: DatabaseRef> Database for RemoteDB<SP, ExtDB> {
     }
 
     fn block_hash(&mut self, number: U256) -> Result<B256, Self::Error> {
+        /* TODO: consider whether we should fetch the block hash, maybe we should just refuse */
         match self.db.block_hashes.entry(number) {
             Entry::Occupied(entry) => Ok(*entry.get()),
             Entry::Vacant(entry) => match self.state_provider.fetch_block_hash(number) {
@@ -187,7 +221,10 @@ impl<SP: StateProvider, ExtDB: DatabaseRef> Database for RemoteDB<SP, ExtDB> {
                     entry.insert(hash);
                     Ok(hash)
                 }
-                Err(_) => self.db.block_hash(number),
+                Err(_) => match self.db.block_hash(number) {
+                    Ok(hash) => Ok(hash),
+                    Err(err) => Err(RemoteDBError::Database(err)),
+                },
             },
         }
     }
