@@ -11,6 +11,8 @@ struct Cli {
     /// The rpc endpoint to connect to
     #[arg(short, long, default_value_t = String::from("http://127.0.0.1:8545"))]
     rpc: String,
+    #[arg(default_value_t = false)]
+    trace: bool,
 }
 
 #[tokio::main]
@@ -46,7 +48,9 @@ async fn main() {
                 }
             } else if command == "execute" {
                 let tx: TxEnv = serde_json::from_str(args).expect("could not parse transaction");
-                let res = service.execute(tx).expect("could not execute");
+                let res = service
+                    .execute(tx, cli_args.trace)
+                    .expect("could not execute");
                 println!(
                     "{}",
                     serde_json::to_string(&res).expect("failed to serialize result")

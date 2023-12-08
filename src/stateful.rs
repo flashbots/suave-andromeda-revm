@@ -2,6 +2,8 @@ pub use crate::remote_db::{RemoteDB, RemoteDBError};
 
 use core::convert::Infallible;
 
+use std::io;
+
 use tokio::sync::{mpsc, watch};
 
 use execution::rpc::http_rpc::HttpRpc;
@@ -10,6 +12,7 @@ use execution::ExecutionClient;
 use helios::prelude::Block;
 
 use revm::db::{CacheDB, EmptyDB};
+use revm::inspectors::TracerEip3155;
 
 use ethers::core::types::{Block as EthersBlock, BlockNumber, TxHash};
 use ethers::providers::{Http, Provider, ProviderError};
@@ -79,14 +82,24 @@ impl StatefulExecutor {
         Ok(())
     }
 
-    pub fn execute(&self, tx: TxEnv) -> Result<ExecutionResult, StatefulExecutorError> {
+    pub fn execute(
+        &self,
+        tx: TxEnv,
+        trace: bool,
+    ) -> Result<ExecutionResult, StatefulExecutorError> {
         let mut evm = EVM::new();
         evm.database(RemoteDB::new(
             self.rpc_state_provider.clone(),
             CacheDB::new(EmptyDB::new()),
         ));
-        evm.env.tx = tx;
-        match evm.transact() {
+        match match trace {
+            false => evm.transact(),
+            true => {
+                let writer = Box::new(io::stderr());
+                evm.env.tx = tx;
+                evm.inspect(TracerEip3155::new(writer, true, true))
+            }
+        } {
             Ok(evm_res) => Ok(evm_res.result),
             Err(err) => Err(StatefulExecutorError::EVMError(err)),
         }
