@@ -40,7 +40,7 @@ impl<R: ExecutionRpc> StateProvider for ExecutionClient<R> {
                 AccountInfo::new(
                     acc.balance.into(),
                     acc.nonce,
-                    acc.code_hash.to_fixed_bytes().into(),
+                    B256::from(acc.code_hash.to_fixed_bytes()),
                     Bytecode::new_raw(Bytes::from_iter(acc.code.into_iter())),
                 ),
                 acc.slots,
@@ -50,7 +50,7 @@ impl<R: ExecutionRpc> StateProvider for ExecutionClient<R> {
     }
 
     fn fetch_storage(&mut self, address: Address, index: U256) -> Result<U256, StateProviderError> {
-        let slots = Box::new([EH256::from_slice(index.as_le_slice())]);
+        let slots = Box::new([EH256::from_slice(index.to_be_bytes_vec().as_slice())]);
         match block_in_place(|| {
             Handle::current().block_on(self.get_account(
                 &EthersAddress::from_slice(address.as_slice()),
@@ -103,7 +103,7 @@ impl<SP: StateProvider, ExtDB: DatabaseRef> RemoteDB<SP, ExtDB> {
             let ethers_slots = Vec::from_iter(
                 slots_vec
                     .iter()
-                    .map(|slot| EH256::from_slice(slot.as_le_slice())),
+                    .map(|slot| EH256::from_slice(slot.to_be_bytes_vec().as_slice())),
             );
             (*addr, ethers_slots)
         }));
@@ -129,7 +129,7 @@ impl<SP: StateProvider, ExtDB: DatabaseRef> RemoteDB<SP, ExtDB> {
                     for (slot, value) in &slots {
                         if let Err(_err) = self.db.insert_account_storage(
                             addr,
-                            U256::from_le_slice(slot.as_bytes()),
+                            U256::from_be_slice(slot.as_bytes()),
                             U256::from_limbs(value.0),
                         ) {
                             // wat do?

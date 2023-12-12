@@ -88,6 +88,7 @@ impl StatefulExecutor {
         trace: bool,
     ) -> Result<ExecutionResult, StatefulExecutorError> {
         let mut evm = EVM::new();
+        evm.env.tx = tx;
         evm.database(RemoteDB::new(
             self.rpc_state_provider.clone(),
             CacheDB::new(EmptyDB::new()),
@@ -96,12 +97,75 @@ impl StatefulExecutor {
             false => evm.transact(),
             true => {
                 let writer = Box::new(io::stderr());
-                evm.env.tx = tx;
                 evm.inspect(TracerEip3155::new(writer, true, true))
             }
         } {
             Ok(evm_res) => Ok(evm_res.result),
             Err(err) => Err(StatefulExecutorError::EVMError(err)),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum CommandError {
+    InputError(String),
+    SerializationError(String),
+    StatefulExecutorError(StatefulExecutorError),
+}
+
+impl StatefulExecutor {
+    pub async fn execute_command(&self, input: &str, trace: bool) -> Result<String, CommandError> {
+        // We support two commands: advance <block number|latest|empty(latest)> and execute <TxEnv json>
+        let (command, args) = match input.split_once(' ') {
+            Some((command, args)) => (command, Some(args)),
+            None => (input, None),
+        };
+
+        match command {
+            "advance" => {
+                let tag = match args {
+                    None => Ok(BlockTag::Latest),
+                    Some("latest") => Ok(BlockTag::Latest),
+                    Some(args) => match args.parse::<u64>() {
+                        Ok(n) => Ok(BlockTag::Number(n)),
+                        _ => Err(CommandError::InputError(String::from("invalid block tag"))),
+                    },
+                }?;
+
+                match self.advance(tag).await {
+                    Ok(_) => Ok(String::from("advanced")),
+                    Err(e) => Err(CommandError::StatefulExecutorError(e)),
+                }
+            }
+            "execute" => match args {
+                None => Err(CommandError::InputError(String::from(
+                    "no args passed to execute",
+                ))),
+                Some(args) => {
+                    let tx = match serde_json::from_str::<TxEnv>(args) {
+                        Ok(tx) => Ok(tx),
+                        Err(e) => Err(CommandError::SerializationError(format!(
+                            "could not parse tx: {}",
+                            e
+                        ))),
+                    }?;
+
+                    match self.execute(tx, trace) {
+                        Ok(res) => match serde_json::to_string(&res) {
+                            Ok(res) => Ok(String::from(res)),
+                            Err(e) => Err(CommandError::InputError(format!(
+                                "could not serialize result: {}",
+                                e
+                            ))),
+                        },
+                        Err(e) => Err(CommandError::InputError(format!(
+                            "could not execute: {:?}",
+                            e
+                        ))),
+                    }
+                }
+            },
+            _ => Err(CommandError::InputError(format!("invalid command"))),
         }
     }
 }
