@@ -128,7 +128,7 @@ pub enum CommandError {
 }
 
 impl StatefulExecutor {
-    pub async fn execute_command(&self, input: &str, trace: bool) -> Result<String, CommandError> {
+    pub async fn execute_command(&mut self, input: &str, trace: bool) -> Result<String, CommandError> {
         // We support two commands: advance <block number|latest|empty(latest)> and execute <TxEnv json>
         let (command, args) = match input.split_once(' ') {
             Some((command, args)) => (command, Some(args)),
