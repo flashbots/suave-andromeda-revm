@@ -7,13 +7,8 @@ use tracing::{error, info};
 use common::types::Block;
 
 use reth_primitives::{
-    B64,
-    Bloom,
-    Header,
-    hex::FromHex,
-    Address,
-    revm_primitives::FixedBytes,
-    revm::env::recover_header_signer
+    hex::FromHex, revm::env::recover_header_signer, revm_primitives::FixedBytes, Address, Bloom,
+    Header, B64,
 };
 
 #[derive(Debug)]
@@ -29,7 +24,9 @@ fn verify(block: &Block) -> Address {
     let creator: Address = recover_header_signer(&header).unwrap_or_else(|| {
         panic!(
             "Failed to recover Clique Consensus signer from header ({}, {}) using extradata {}",
-            header.number, header.hash_slow(), header.extra_data
+            header.number,
+            header.hash_slow(),
+            header.extra_data
         )
     });
 
@@ -37,7 +34,7 @@ fn verify(block: &Block) -> Address {
 }
 
 pub fn extract_header(block: &Block) -> Result<Header> {
-    Ok(Header {   
+    Ok(Header {
         parent_hash: FixedBytes::new(block.parent_hash.into()),
         ommers_hash: FixedBytes::new(block.sha3_uncles.into()),
         beneficiary: Address::new(block.miner.into()),
@@ -45,7 +42,9 @@ pub fn extract_header(block: &Block) -> Result<Header> {
         transactions_root: FixedBytes::new(block.transactions_root.into()),
         receipts_root: FixedBytes::new(block.receipts_root.into()),
         withdrawals_root: None,
-        logs_bloom: Bloom { 0: FixedBytes::new(block.logs_bloom.to_vec().try_into().unwrap()) },
+        logs_bloom: Bloom {
+            0: FixedBytes::new(block.logs_bloom.to_vec().try_into().unwrap()),
+        },
         timestamp: block.timestamp.as_u64(),
         mix_hash: FixedBytes::new(block.mix_hash.into()),
         nonce: u64::from_be_bytes(B64::from_hex(block.nonce.clone())?.try_into()?),
@@ -67,7 +66,8 @@ impl Consensus {
             Address::from_hex("0x0981717712ed2c4919fdbc27dfc804800a9eeff9")?,
             Address::from_hex("0x0e5b9aa4925ed1beeb08d1c5a92477a1b719baa7")?,
             Address::from_hex("0x0e8705e07bbe1ce2c39093df3d20aaa5120bfc7a")?,
-        ].to_vec();
+        ]
+        .to_vec();
 
         Ok(Consensus {
             latest_block: None,
@@ -75,48 +75,28 @@ impl Consensus {
         })
     }
 
-    pub fn sync(&mut self, block: &Block) -> Result<(), ConsensusError> {
-        let creator = verify(&block);
-
-        if !self.signers.contains(&creator) {
-            error!(
-                target: "helios::consensus", 
-                "sync block contains invalid block creator: {}",
-                creator
-            );
-            return Err(ConsensusError::InvalidSignature.into());
-        }
-
-        info!(
-            target: "helios::consensus",
-            "PoA consensus client in sync with block: {}: {:#?}",
-            &block.number, &block.hash
-        );
-
-        self.latest_block = Some(block.clone());
-
-        Ok(())
-    }
-
     pub fn advance(&mut self, block: &Block) -> Result<(), ConsensusError> {
-        if self.latest_block.as_ref().unwrap().number.as_u64()+1 != block.number.as_u64() {
-            error!(
-                target: "helios::consensus", 
-                "advance block recieved block with invalid block number: expected: {}, actual {}",
-                self.latest_block.as_ref().unwrap().timestamp.as_u64()+1,
-                block.timestamp
-            );
-            return Err(ConsensusError::NotRelevant.into());
+        if let Some(latest_block) = self.latest_block.as_ref() {
+            if latest_block.number.as_u64() > block.number.as_u64() {
+                error!(
+                    target: "helios::consensus",
+                    "advance block recieved block with invalid block number: expected: {}, actual {}",
+                    self.latest_block.as_ref().unwrap().timestamp.as_u64()+1,
+                    block.timestamp
+                );
+                return Err(ConsensusError::NotRelevant);
+            }
         }
+
         let creator = verify(&block);
 
         if !self.signers.contains(&creator) {
             error!(
-                target: "helios::consensus", 
+                target: "helios::consensus",
                 "advance block contains invalid block creator: {}",
                 creator
             );
-            return Err(ConsensusError::InvalidSignature.into());
+            return Err(ConsensusError::InvalidSignature);
         }
 
         info!(

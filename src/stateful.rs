@@ -19,9 +19,9 @@ use ethers::providers::{Http, Provider, ProviderError};
 use ethers::utils as ethers_utils;
 use std::convert::TryFrom;
 
+use crate::consensus::Consensus;
 use crate::utils::{ethers_block_to_helios, BlockError};
 use helios::types::BlockTag;
-use crate::consensus::Consensus;
 
 use revm::{
     primitives::{EVMError, ExecutionResult, TxEnv},
@@ -82,13 +82,9 @@ impl StatefulExecutor {
         let helios_block =
             ethers_block_to_helios(block).map_err(|err| StatefulExecutorError::BlockError(err))?;
 
-        if self.consensus.latest_block.is_none() {
-            self.consensus.sync(&helios_block)
-                .map_err(|err| StatefulExecutorError::ConsensusError(err))?;
-        } else {
-            self.consensus.advance(&helios_block)
-                .map_err(|err| StatefulExecutorError::ConsensusError(err))?;
-        }
+        self.consensus
+            .advance(&helios_block)
+            .map_err(|err| StatefulExecutorError::ConsensusError(err))?;
 
         self.finalized_block_tx
             .send(Some(helios_block))
@@ -128,7 +124,11 @@ pub enum CommandError {
 }
 
 impl StatefulExecutor {
-    pub async fn execute_command(&mut self, input: &str, trace: bool) -> Result<String, CommandError> {
+    pub async fn execute_command(
+        &mut self,
+        input: &str,
+        trace: bool,
+    ) -> Result<String, CommandError> {
         // We support two commands: advance <block number|latest|empty(latest)> and execute <TxEnv json>
         let (command, args) = match input.split_once(' ') {
             Some((command, args)) => (command, Some(args)),
