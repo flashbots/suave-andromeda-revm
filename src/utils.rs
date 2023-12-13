@@ -1,7 +1,8 @@
-use ethers::core::types::{Block as EthersBlock, Bytes, TxHash};
+use ethers::core::types::{Block as EthersBlock, TxHash};
 use helios::types::{Block as HeliosBlock, Transactions};
 
 use ethers::types::H256 as EH256;
+use reth_primitives::hex::ToHex;
 use revm::primitives::{Address, U256};
 
 pub fn revm_access_list_to_ethers(
@@ -45,10 +46,10 @@ pub fn ethers_block_to_helios(block: EthersBlock<TxHash>) -> Result<HeliosBlock,
         gas_limit: block.gas_limit.as_u64().into(),
         gas_used: block.gas_used.as_u64().into(),
         hash,
-        logs_bloom: Bytes::from_iter(block.logs_bloom.unwrap().as_bytes().into_iter()),
+        logs_bloom: block.logs_bloom.unwrap_or_default().data().into(),
         miner: block.author.unwrap_or_default(),
         mix_hash: block.mix_hash.unwrap_or_default(),
-        nonce: String::from(""), // block.seal_fields?
+        nonce: block.nonce.unwrap_or_default().encode_hex(),
         parent_hash: block.parent_hash,
         receipts_root: block.receipts_root,
         sha3_uncles: block.uncles_hash,

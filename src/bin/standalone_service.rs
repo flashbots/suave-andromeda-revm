@@ -15,7 +15,7 @@ struct Cli {
 #[tokio::main]
 async fn main() {
     let cli_args = Cli::parse();
-    let service = StatefulExecutor::new_with_rpc(cli_args.rpc.clone());
+    let mut service = StatefulExecutor::new_with_rpc(cli_args.rpc.clone());
 
     // TODO: probably doesnt work due to async
     loop {

@@ -21,6 +21,7 @@ use std::convert::TryFrom;
 
 use crate::utils::{ethers_block_to_helios, BlockError};
 use helios::types::BlockTag;
+use crate::consensus::Consensus;
 
 use revm::{
     primitives::{EVMError, ExecutionResult, TxEnv},
@@ -30,6 +31,7 @@ use revm::{
 pub struct StatefulExecutor {
     pub rpc_state_provider: ExecutionClient<HttpRpc>,
     pub http_provider: Provider<Http>,
+    pub consensus: Consensus,
     finalized_block_tx: watch::Sender<Option<Block>>,
 }
 
@@ -38,12 +40,14 @@ pub enum StatefulExecutorError {
     BlockError(BlockError),
     ProviderError(ProviderError),
     EVMError(EVMError<RemoteDBError<Infallible>>),
+    ConsensusError(consensus::errors::ConsensusError),
 }
 
 impl StatefulExecutor {
     pub fn new_with_rpc(rpc: String) -> Self {
         let (_block_tx, block_rx) = mpsc::channel(1);
         let (finalized_block_tx, finalized_block_rx) = watch::channel(None);
+        let consensus = Consensus::new().unwrap();
         let rpc_state_provider: ExecutionClient<HttpRpc> =
             ExecutionClient::new(&rpc, State::new(block_rx, finalized_block_rx, 1))
                 .expect("could not instantiate execution client");
@@ -53,12 +57,13 @@ impl StatefulExecutor {
 
         StatefulExecutor {
             rpc_state_provider,
+            consensus,
             http_provider,
             finalized_block_tx,
         }
     }
 
-    pub async fn advance(&self, block_tag: BlockTag) -> Result<(), StatefulExecutorError> {
+    pub async fn advance(&mut self, block_tag: BlockTag) -> Result<(), StatefulExecutorError> {
         let block_selector = match block_tag {
             BlockTag::Latest => ethers_utils::serialize(&BlockNumber::Latest),
             BlockTag::Finalized => ethers_utils::serialize(&BlockNumber::Finalized),
@@ -76,6 +81,15 @@ impl StatefulExecutor {
 
         let helios_block =
             ethers_block_to_helios(block).map_err(|err| StatefulExecutorError::BlockError(err))?;
+
+        if self.consensus.latest_block.is_none() {
+            self.consensus.sync(&helios_block)
+                .map_err(|err| StatefulExecutorError::ConsensusError(err))?;
+        } else {
+            self.consensus.advance(&helios_block)
+                .map_err(|err| StatefulExecutorError::ConsensusError(err))?;
+        }
+
         self.finalized_block_tx
             .send(Some(helios_block))
             .expect("could not submit new block to state");
