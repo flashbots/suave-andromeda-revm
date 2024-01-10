@@ -13,7 +13,7 @@ pub fn revm_access_list_to_ethers(
     for (addr, revm_slots) in revm_access_list {
         let mut ethers_slots: Vec<EH256> = Vec::new();
         for slot in revm_slots {
-            ethers_slots.push(EH256::from_slice(slot.as_le_slice()));
+            ethers_slots.push(EH256::from_slice(slot.to_be_bytes_vec().as_slice()));
         }
         ethers_access_list.push((addr, ethers_slots));
     }

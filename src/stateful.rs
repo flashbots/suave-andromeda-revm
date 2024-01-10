@@ -4,7 +4,9 @@ use core::convert::Infallible;
 
 use std::io;
 
+use tokio::runtime::Handle;
 use tokio::sync::{mpsc, watch};
+use tokio::task::block_in_place;
 
 use execution::rpc::http_rpc::HttpRpc;
 use execution::state::State;
@@ -13,6 +15,7 @@ use helios::prelude::Block;
 
 use revm::db::{CacheDB, EmptyDB};
 use revm::inspectors::TracerEip3155;
+use revm::primitives::{Address, SpecId, B256, U256};
 
 use ethers::core::types::{Block as EthersBlock, BlockNumber, TxHash};
 use ethers::providers::{Http, Provider, ProviderError};
@@ -21,10 +24,11 @@ use std::convert::TryFrom;
 
 use crate::consensus::Consensus;
 use crate::utils::{ethers_block_to_helios, BlockError};
+use eyre::Report;
 use helios::types::BlockTag;
 
 use revm::{
-    primitives::{EVMError, ExecutionResult, TxEnv},
+    primitives::{BlockEnv, CfgEnv, EVMError, Env, ExecutionResult, MsgEnv, TxEnv},
     EVM,
 };
 
@@ -38,6 +42,7 @@ pub struct StatefulExecutor {
 #[derive(Debug)]
 pub enum StatefulExecutorError {
     BlockError(BlockError),
+    RPCError(Report),
     ProviderError(ProviderError),
     EVMError(EVMError<RemoteDBError<Infallible>>),
     ConsensusError(consensus::errors::ConsensusError),
@@ -97,12 +102,40 @@ impl StatefulExecutor {
         tx: TxEnv,
         trace: bool,
     ) -> Result<ExecutionResult, StatefulExecutorError> {
-        let mut evm = EVM::new();
-        evm.env.tx = tx;
+        let block_env = match block_in_place(|| {
+            Handle::current().block_on(self.rpc_state_provider.get_block(BlockTag::Latest, false))
+        }) {
+            Err(err) => Err(StatefulExecutorError::RPCError(err)),
+            Ok(b) => Ok(BlockEnv {
+                number: U256::from(b.number.as_u64()),
+                coinbase: Address::from_slice(b.miner.as_bytes()),
+                timestamp: U256::from(b.timestamp.as_u64()),
+                gas_limit: U256::from(b.gas_limit.as_u64()),
+                basefee: U256::from_limbs(b.base_fee_per_gas.0),
+                difficulty: U256::from_limbs(b.difficulty.0),
+                prevrandao: Some(B256::ZERO), // TODO! REVM thinks this is post-merge
+                blob_excess_gas_and_price: None,
+            }),
+        }?;
+
+        let mut cfg = CfgEnv::default();
+        cfg.spec_id = SpecId::SHANGHAI;
+
+        let msg = MsgEnv {
+            caller: tx.caller.clone(),
+        };
+
+        let mut evm = EVM::with_env(Env {
+            tx,
+            cfg,
+            msg,
+            block: block_env,
+        });
         evm.database(RemoteDB::new(
             self.rpc_state_provider.clone(),
             CacheDB::new(EmptyDB::new()),
         ));
+
         match match trace {
             false => evm.transact(),
             true => {
