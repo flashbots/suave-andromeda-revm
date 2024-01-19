@@ -31,5 +31,5 @@ echo "dummnyquote" > /dev/attestation/quote
 
 
 ```shell
-cargo run -p witness-revm --example andromeda_test
+cargo run -p suave-andromeda-revm --example andromeda_test
 ```

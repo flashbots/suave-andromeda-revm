@@ -7,7 +7,7 @@ use ethers::abi::{ethabi, parse_abi, Token};
 use ethers::contract::{BaseContract, Lazy};
 use std::include_str;
 
-use witness_revm::new_andromeda_revm;
+use suave_andromeda_revm::new_andromeda_revm;
 
 fn main() -> eyre::Result<()> {
     // Read from the untrusted host via a Gramine-mapped file
