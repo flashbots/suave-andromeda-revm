@@ -13,9 +13,14 @@ use execution::state::State;
 use execution::ExecutionClient;
 use helios::prelude::Block;
 
-use revm::db::{CacheDB, EmptyDB};
-use revm::inspectors::TracerEip3155;
-use revm::primitives::{Address, SpecId, B256, U256};
+use revm::{
+    db::{CacheDB, EmptyDB},
+    inspectors::TracerEip3155,
+    primitives::SpecId,
+    primitives::{Address, B256, U256},
+    primitives::{BlockEnv, CfgEnv, EVMError, Env, ExecutionResult, MsgEnv, TxEnv},
+    Transact,
+};
 
 use ethers::core::types::{Block as EthersBlock, BlockNumber, TxHash};
 use ethers::providers::{Http, Provider, ProviderError};
@@ -27,17 +32,14 @@ use crate::utils::{ethers_block_to_helios, BlockError};
 use eyre::Report;
 use helios::types::BlockTag;
 
-use revm::{
-    primitives::{BlockEnv, CfgEnv, EVMError, Env, ExecutionResult, MsgEnv, TxEnv},
-    EVM,
-};
-
 pub struct StatefulExecutor {
     pub rpc_state_provider: ExecutionClient<HttpRpc>,
     pub http_provider: Provider<Http>,
     pub consensus: Consensus,
     finalized_block_tx: watch::Sender<Option<Block>>,
 }
+
+use crate::new_andromeda_revm;
 
 #[derive(Debug)]
 pub enum StatefulExecutorError {
@@ -125,22 +127,29 @@ impl StatefulExecutor {
             caller: tx.caller.clone(),
         };
 
-        let mut evm = EVM::with_env(Env {
-            tx,
+        let mut env = Env {
             cfg,
             msg,
+            tx,
             block: block_env,
-        });
-        evm.database(RemoteDB::new(
+        };
+
+        let mut db = RemoteDB::new(
             self.rpc_state_provider.clone(),
             CacheDB::new(EmptyDB::new()),
-        ));
+        );
 
         match match trace {
-            false => evm.transact(),
             true => {
                 let writer = Box::new(io::stderr());
-                evm.inspect(TracerEip3155::new(writer, true, true))
+                let mut inspector = TracerEip3155::new(writer, true, true);
+
+                let mut evm_impl = new_andromeda_revm(&mut db, &mut env, Some(&mut inspector));
+                evm_impl.transact()
+            }
+            false => {
+                let mut evm_impl = new_andromeda_revm(&mut db, &mut env, None);
+                evm_impl.transact()
             }
         } {
             Ok(evm_res) => Ok(evm_res.result),

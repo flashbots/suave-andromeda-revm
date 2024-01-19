@@ -8,12 +8,14 @@ edition = "2021"
 [dependencies]
 tokio = "1.34.0"
 async-std = { version = "1", features = ["attributes", "tokio1"] }
+sha2 = { version = "0.10", features = ["std"], default-features = false }
 futures = "0.3"
 log = { version = "0.4", features = ["std"] }
 ethers = "2.0.11"
-revm = { git = "ssh://git@github.com/flashbots/revm-andromeda.git", branch = "attest", features = ["serde"] }
+revm = { git = "ssh://git@github.com/flashbots/revm-andromeda.git", branch = "extensible-precompiles", features = ["serde"] }
 helios = { git = "https://github.com/a16z/helios", branch = "master" }
 common = { git = "https://github.com/a16z/helios", branch = "master" }
+lazy_static = { version = "1.4.0" }
 execution = { git = "https://github.com/a16z/helios", branch = "master" }
 clap = { version = "4.4.11", features = ["derive"] }
 serde = "1.0.193"
@@ -25,7 +27,8 @@ reth-primitives = { git = "https://github.com/paradigmxyz/reth", tag = "v0.1.0-a
 ssz-rs = { package = "ssz_rs", version = "0.9.0" }
 eyre = "0.6.8"
 tracing = "0.1.37"
+once_cell = "1.19.0"
 
 [patch."https://github.com/bluealloy/revm"]
-revm = { git = "ssh://git@github.com/flashbots/revm-andromeda.git", branch = "attest" }
-revm-primitives = { git = "ssh://git@github.com/flashbots/revm-andromeda.git", branch = "attest" }
+revm = { git = "ssh://git@github.com/flashbots/revm-andromeda.git", branch = "extensible-precompiles" }
+revm-primitives = { git = "ssh://git@github.com/flashbots/revm-andromeda.git", branch = "extensible-precompiles" }
