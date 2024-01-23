@@ -1,3 +1,6 @@
+> [!WARNING]
+> This repository is a work in progress, and for now only functions as a showcase. This code *is not intended to secure any valuable information*.
+
 # Anrdomeda REVM
 
 This an EVM with precompiles used internally by SUAVE for key management and boostrapping kettles.
@@ -29,7 +32,10 @@ sudo chown $USER:$USER /dev/attestation
 echo "dummnyquote" > /dev/attestation/quote
 ```
 
-
 ```shell
 cargo run -p suave-andromeda-revm --example andromeda_test
 ```
+
+## License
+
+The code in this project is free software under the [MIT license](LICENSE).
