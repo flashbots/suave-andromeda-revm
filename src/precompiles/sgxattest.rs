@@ -9,7 +9,6 @@ use ethers::types::H160;
 use sha2::*;
 
 use lazy_static::lazy_static;
-use core::slice::SlicePattern;
 use std::{collections::HashMap, sync::Mutex};
 use std::{fs, fs::File, io::Read, io::Write, path::Path};
 
@@ -71,7 +70,7 @@ fn sgxattest_volatile_set(input: &[u8], gas_limit: u64, env: &Env) -> Precompile
         let mut key: [u8; 52] = [0; 52];
         key[0..20].copy_from_slice(&domain_sep.0 .0);
         key[20..52].copy_from_slice(&input[0..32]);
-        let mut val: [u8; 32];
+        let mut val: [u8; 32] = [0; 32];
         val.copy_from_slice(&input[32..64]);
         vol.insert(key, val);
         return Ok((gas_used, vec![]));
