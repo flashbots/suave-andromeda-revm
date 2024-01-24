@@ -9,6 +9,7 @@ use ethers::types::H160;
 use sha2::*;
 
 use lazy_static::lazy_static;
+use core::slice::SlicePattern;
 use std::{collections::HashMap, sync::Mutex};
 use std::{fs, fs::File, io::Read, io::Write, path::Path};
 
@@ -55,6 +56,9 @@ lazy_static! {
 const SGX_ATTESTATION_FAILED: PrecompileError =
     PrecompileError::CustomPrecompileError("gramnie sgx attestation failed");
 
+const SGX_VOLATILE_KEY_MISSING: PrecompileError =
+    PrecompileError::CustomPrecompileError("key does not exist in volatile storage");
+
 fn sgxattest_volatile_set(input: &[u8], gas_limit: u64, env: &Env) -> PrecompileResult {
     let gas_used = 10000 as u64;
     if gas_used > gas_limit {
@@ -67,7 +71,8 @@ fn sgxattest_volatile_set(input: &[u8], gas_limit: u64, env: &Env) -> Precompile
         let mut key: [u8; 52] = [0; 52];
         key[0..20].copy_from_slice(&domain_sep.0 .0);
         key[20..52].copy_from_slice(&input[0..32]);
-        let val: [u8; 32] = input[32..64].try_into().unwrap();
+        let mut val: [u8; 32];
+        val.copy_from_slice(&input[32..64]);
         vol.insert(key, val);
         return Ok((gas_used, vec![]));
     }
@@ -85,8 +90,10 @@ fn sgxattest_volatile_get(input: &[u8], gas_limit: u64, env: &Env) -> Precompile
         let mut key: [u8; 52] = [0; 52];
         key[0..20].copy_from_slice(&domain_sep.0 .0);
         key[20..52].copy_from_slice(&input[0..32]);
-        let val = vol.get(&key).unwrap();
-        return Ok((gas_used, val.to_vec()));
+        if let Some(val) = vol.get(&key) {
+            return Ok((gas_used, val.to_vec()));
+        }
+        return Err(SGX_VOLATILE_KEY_MISSING);
     }
 }
 
