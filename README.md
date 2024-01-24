@@ -10,7 +10,7 @@ The Andromeda [precompiles](src/precompiles/) rely on features from Gramine, pro
 - TODO `Suave.volatile{Set/Get}` uses a data structure in local memory
 - `Suave.attestSgx` uses [Gramine's remote attestation `/dev/attestation/quote`](https://gramine.readthedocs.io/en/stable/devel/features.html#attestation)
 
-The tests include a thin wrapper for the precompiles [examples/Andromeda.sol]. This is a small interface, but it should be sufficient to run the [Key Manager demo](https://github.com/flashbots/andromeda-keymgr-contracts/)
+The tests include a thin wrapper for the precompiles [examples/Andromeda.sol]. This is a small interface, but it should be sufficient to run the [Key Manager demo](https://github.com/flashbots/andromeda-sirrah-contracts/)
 
 ## Building
 ```shell
