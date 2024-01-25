@@ -22,6 +22,7 @@ pub fn sgx_precompiles() -> &'static Precompiles {
                 sgxattest::VOLATILESET,
                 sgxattest::VOLATILEGET,
                 sgxattest::RANDOM,
+                sgxattest::SEALINGKEY,
             ]
             .into(),
         };

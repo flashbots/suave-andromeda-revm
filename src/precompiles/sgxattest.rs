@@ -4,8 +4,9 @@ use revm::precompile::{
 };
 use revm::primitives::Env;
 
-use ethers::abi::Token;
+use ethers::abi::{encode_packed, Token};
 use ethers::types::H160;
+use ethers::utils::keccak256;
 use sha2::*;
 
 use lazy_static::lazy_static;
@@ -34,17 +35,10 @@ pub const RANDOM: PrecompileWithAddress = PrecompileWithAddress::new(
     Precompile::Standard(sgxattest_random as StandardPrecompileFn),
 );
 
-fn sgxattest_random(_input: &[u8], gas_limit: u64) -> PrecompileResult {
-    let gas_used = 10000 as u64;
-    if gas_used > gas_limit {
-        return Err(PrecompileError::OutOfGas);
-    } else {
-        let mut file = std::fs::File::open("/dev/urandom").unwrap();
-        let mut buffer = [0; 32];
-        file.read(&mut buffer[..]).unwrap();
-        return Ok((gas_used, buffer.to_vec()));
-    }
-}
+pub const SEALINGKEY: PrecompileWithAddress = PrecompileWithAddress::new(
+    u64_to_address(0x40704),
+    Precompile::Env(sgxattest_sealing_key as EnvPrecompileFn),
+);
 
 // We will store volatile values in an in-memory hashmap.
 // The keys are [20 byte address][32 bytes application defined]
@@ -57,44 +51,6 @@ const SGX_ATTESTATION_FAILED: PrecompileError =
 
 const SGX_VOLATILE_KEY_MISSING: PrecompileError =
     PrecompileError::CustomPrecompileError("key does not exist in volatile storage");
-
-fn sgxattest_volatile_set(input: &[u8], gas_limit: u64, env: &Env) -> PrecompileResult {
-    let gas_used = 10000 as u64;
-    if gas_used > gas_limit {
-        return Err(PrecompileError::OutOfGas);
-    } else if input.len() != 64 {
-        return Err(SGX_ATTESTATION_FAILED);
-    } else {
-        let mut vol = VOLATILE.lock().unwrap();
-        let domain_sep = env.msg.caller;
-        let mut key: [u8; 52] = [0; 52];
-        key[0..20].copy_from_slice(&domain_sep.0 .0);
-        key[20..52].copy_from_slice(&input[0..32]);
-        let mut val: [u8; 32] = [0; 32];
-        val.copy_from_slice(&input[32..64]);
-        vol.insert(key, val);
-        return Ok((gas_used, vec![]));
-    }
-}
-
-fn sgxattest_volatile_get(input: &[u8], gas_limit: u64, env: &Env) -> PrecompileResult {
-    let gas_used = 10000 as u64;
-    if gas_used > gas_limit {
-        return Err(PrecompileError::OutOfGas);
-    } else if input.len() != 32 {
-        return Err(SGX_ATTESTATION_FAILED);
-    } else {
-        let vol = VOLATILE.lock().unwrap();
-        let domain_sep = env.msg.caller;
-        let mut key: [u8; 52] = [0; 52];
-        key[0..20].copy_from_slice(&domain_sep.0 .0);
-        key[20..52].copy_from_slice(&input[0..32]);
-        if let Some(val) = vol.get(&key) {
-            return Ok((gas_used, val.to_vec()));
-        }
-        return Err(SGX_VOLATILE_KEY_MISSING);
-    }
-}
 
 fn sgxattest_run(input: &[u8], gas_limit: u64, env: &Env) -> PrecompileResult {
     let gas_used = 10000 as u64;
@@ -143,4 +99,97 @@ fn sgxattest_run(input: &[u8], gas_limit: u64, env: &Env) -> PrecompileResult {
         // Copy the attestation quote to our output directory
         return Ok((gas_used, quote));
     }
+}
+
+fn sgxattest_volatile_set(input: &[u8], gas_limit: u64, env: &Env) -> PrecompileResult {
+    let gas_used = 10000 as u64;
+    if gas_used > gas_limit {
+        return Err(PrecompileError::OutOfGas);
+    } else if input.len() != 64 {
+        return Err(SGX_ATTESTATION_FAILED);
+    } else {
+        let mut vol = VOLATILE.lock().unwrap();
+        let domain_sep = env.msg.caller;
+        let mut key: [u8; 52] = [0; 52];
+        key[0..20].copy_from_slice(&domain_sep.0 .0);
+        key[20..52].copy_from_slice(&input[0..32]);
+        let mut val: [u8; 32] = [0; 32];
+        val.copy_from_slice(&input[32..64]);
+        vol.insert(key, val);
+        return Ok((gas_used, vec![]));
+    }
+}
+
+fn sgxattest_volatile_get(input: &[u8], gas_limit: u64, env: &Env) -> PrecompileResult {
+    let gas_used = 10000 as u64;
+    if gas_used > gas_limit {
+        return Err(PrecompileError::OutOfGas);
+    } else if input.len() != 32 {
+        return Err(SGX_ATTESTATION_FAILED);
+    } else {
+        let vol = VOLATILE.lock().unwrap();
+        let domain_sep = env.msg.caller;
+        let mut key: [u8; 52] = [0; 52];
+        key[0..20].copy_from_slice(&domain_sep.0 .0);
+        key[20..52].copy_from_slice(&input[0..32]);
+        if let Some(val) = vol.get(&key) {
+            return Ok((gas_used, val.to_vec()));
+        }
+        return Err(SGX_VOLATILE_KEY_MISSING);
+    }
+}
+
+fn sgxattest_random(_input: &[u8], gas_limit: u64) -> PrecompileResult {
+    let gas_used = 10000 as u64;
+    if gas_used > gas_limit {
+        return Err(PrecompileError::OutOfGas);
+    } else {
+        let mut file = std::fs::File::open("/dev/urandom").unwrap();
+        let mut buffer = [0; 32];
+        file.read(&mut buffer[..]).unwrap();
+        return Ok((gas_used, buffer.to_vec()));
+    }
+}
+
+// Provides a persistent pendant to volatileGet.
+// It uses the mrenclave sealing key as a source to be persistent accross enclave restarts.
+// The original sealing key is derived via caller as the domain saperator
+fn sgxattest_sealing_key(_input: &[u8], gas_limit: u64, env: &Env) -> PrecompileResult {
+    let gas_used = 10000 as u64;
+    if gas_used > gas_limit {
+        return Err(PrecompileError::OutOfGas);
+    }
+
+    let path = Path::new("/dev/attestation/keys/_sgx_mrenclave");
+
+    // Sealing key available
+    if !path.exists() {
+        return Err(SGX_ATTESTATION_FAILED);
+    }
+
+    // Get the mrenclave sealing key
+    let sealing_key = match fs::read(path) {
+        Ok(sealing_key) => sealing_key,
+        Err(error) => {
+            panic!("sealing key read failed {:?}", error);
+        }
+    };
+
+    if sealing_key.is_empty() {
+        panic!("sealing key is empty");
+    }
+
+    let tokens = [
+        Token::FixedBytes(sealing_key),
+        Token::FixedBytes(env.msg.caller.0.to_vec()),
+    ];
+
+    let encoded = match encode_packed(&tokens) {
+        Ok(encoded) => encoded,
+        Err(error) => {
+            panic!("encoded_pack failed {:?}", error);
+        }
+    };
+
+    Ok((gas_used, keccak256(encoded).to_vec()))
 }
