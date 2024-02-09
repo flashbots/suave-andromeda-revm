@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::mpsc::{channel, Sender};
+use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -65,7 +65,6 @@ impl RedisPubsub {
         let pubsub_abi = pubsub_contract.abi();
 
         let client = redis::Client::open("redis://127.0.0.1:6379/").unwrap();
-        let client_clone = client.clone();
 
         let (subscribe_tx, subscribe_rx) = channel::<(String, Address)>();
         let (unsubscribe_tx, unsubscribe_rx) = channel::<(String, Address)>();
@@ -143,83 +142,9 @@ impl RedisPubsub {
             });
         */
 
+        let client_clone = client.clone();
         thread::spawn(move || {
-            // Subscribing and unsubscribing based on [un]subscribe_rx
-            // And then a blocking-with-timeout message poll
-
-            let mut conn = client_clone.get_connection().unwrap();
-
-            let mut subscriber = RedisSusbscriber {
-                pubsub: conn.as_pubsub(),
-                subscribers: HashMap::new(),
-            };
-
-            subscriber
-                .pubsub
-                .set_read_timeout(Some(Duration::from_millis(10)))
-                .unwrap();
-
-            loop {
-                while let Ok((topic, addr)) = subscribe_rx.try_recv() {
-                    match subscriber.subscribers.get_mut(&topic) {
-                        None => {
-                            subscriber.subscribers.insert(topic.clone(), addr);
-                            println!("subscribing to {} {}", topic, addr);
-                            let _ = subscriber.pubsub.subscribe(&topic).map_err(|e| {
-                                println!("{}", e);
-                                RedisPubsubError::ConnectionFailure
-                            });
-                        }
-                        Some(sub) => {
-                            if sub != &addr {
-                                println!("pubsub: invalid subscribe to {} requested {} would shadow previous subscription {}", topic, sub, addr);
-                                assert!(sub == &addr);
-                            }
-                        }
-                    }
-                }
-
-                while let Ok((topic, addr)) = unsubscribe_rx.try_recv() {
-                    match subscriber.subscribers.get_mut(&topic) {
-                        None => {}
-                        Some(sub) => {
-                            if sub != &addr {
-                                println!("pubsub: invalid unsubscribe to {} requested {} would shadow previous subscription {}", topic, sub, addr);
-                                assert!(sub == &addr);
-                            }
-                            let _ = subscriber.pubsub.unsubscribe(topic).map_err(|e| {
-                                println!("{}", e);
-                            });
-                        }
-                    };
-                }
-
-                /* TODO: set timeout for resubscribe and process messages in batches */
-                match subscriber.pubsub.get_message() {
-                    Err(_e) => {
-                        if _e.is_timeout() {
-                            continue;
-                        }
-                        println!("{}", _e);
-                    }
-                    Ok(msg) => {
-                        println!("new message {:?}", msg);
-                        let topic = msg.get_channel_name();
-                        if let Some(sub) = subscriber.subscribers.get(topic) {
-                            notify_tx
-                                .send((
-                                    String::from(topic),
-                                    sub.clone(),
-                                    msg.get_payload_bytes().to_vec(),
-                                ))
-                                .unwrap();
-                        } else {
-                            // Unexpected!
-                            subscriber.pubsub.unsubscribe(topic).unwrap();
-                        }
-                    }
-                };
-            }
+            RedisPubsub::run_forever(client_clone, subscribe_rx, unsubscribe_rx, notify_tx)
         });
 
         RedisPubsub {
@@ -232,6 +157,91 @@ impl RedisPubsub {
             get_message_fn_abi: pubsub_abi.function("get_message").unwrap().clone(),
             subscribe_fn_abi: pubsub_abi.function("subscribe").unwrap().clone(),
             unsubscribe_fn_abi: pubsub_abi.function("unsubscribe").unwrap().clone(),
+        }
+    }
+
+    fn run_forever(
+        client: redis::Client,
+        subscribe_rx: Receiver<(String, Address)>,
+        unsubscribe_rx: Receiver<(String, Address)>,
+        notify_tx: Sender<(String, Address, Vec<u8>)>,
+    ) {
+        // Subscribing and unsubscribing based on [un]subscribe_rx
+        // And then a blocking-with-timeout message poll
+
+        let mut conn = client.get_connection().unwrap();
+
+        let mut subscriber = RedisSusbscriber {
+            pubsub: conn.as_pubsub(),
+            subscribers: HashMap::new(),
+        };
+
+        subscriber
+            .pubsub
+            .set_read_timeout(Some(Duration::from_millis(10)))
+            .unwrap();
+
+        loop {
+            // TODO: move to tokio-comp
+            while let Ok((topic, addr)) = subscribe_rx.try_recv() {
+                match subscriber.subscribers.get_mut(&topic) {
+                    None => {
+                        subscriber.subscribers.insert(topic.clone(), addr);
+                        println!("subscribing to {} {}", topic, addr);
+                        let _ = subscriber.pubsub.subscribe(&topic).map_err(|e| {
+                            println!("{}", e);
+                            RedisPubsubError::ConnectionFailure
+                        });
+                    }
+                    Some(sub) => {
+                        if sub != &addr {
+                            println!("pubsub: invalid subscribe to {} requested {} would shadow previous subscription {}", topic, sub, addr);
+                            assert!(sub == &addr);
+                        }
+                    }
+                }
+            }
+
+            while let Ok((topic, addr)) = unsubscribe_rx.try_recv() {
+                match subscriber.subscribers.get_mut(&topic) {
+                    None => {}
+                    Some(sub) => {
+                        if sub != &addr {
+                            println!("pubsub: invalid unsubscribe to {} requested {} would shadow previous subscription {}", topic, sub, addr);
+                            assert!(sub == &addr);
+                        }
+                        let _ = subscriber.pubsub.unsubscribe(topic).map_err(|e| {
+                            println!("{}", e);
+                        });
+                    }
+                };
+            }
+
+            /* TODO: set timeout for resubscribe and process messages in batches */
+            match subscriber.pubsub.get_message() {
+                Err(_e) => {
+                    if _e.is_timeout() {
+                        continue;
+                    }
+                    println!("{}", _e);
+                }
+                Ok(msg) => {
+                    println!("new message {:?}", msg);
+                    let topic = msg.get_channel_name();
+                    if let Some(sub) = subscriber.subscribers.get(topic) {
+                        notify_tx
+                            .send((
+                                String::from(topic),
+                                sub.clone(),
+                                msg.get_payload_bytes().to_vec(),
+                            ))
+                            .unwrap();
+                    } else {
+                        // Unexpected!
+                        subscriber.pubsub.unsubscribe(topic).unwrap();
+                    }
+                }
+            };
         }
     }
 
