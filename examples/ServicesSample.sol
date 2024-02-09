@@ -6,7 +6,7 @@ import "../src/external_services/builder/Builder.sol";
 
 uint256 constant GOERLI_CHAINID = 5;
 
-contract DBB is WithRedis, WithRedisPubsub, WithBuilder {
+contract StoreServiceSample is WithRedis, WithRedisPubsub, WithBuilder {
     // SM could also be a contract passed in here
     constructor() WithRedis() WithRedisPubsub() WithBuilder(GOERLI_CHAINID) {
     }
@@ -15,10 +15,6 @@ contract DBB is WithRedis, WithRedisPubsub, WithBuilder {
         bundle.profit = builder().simulate(bundle).profit;
         internal_addBundle(abi.encode(bundle), bundle.height);
         pubsub().publish("bundles", abi.encode(bundle));
-    }
-
-    function ping(bytes memory data) public returns (bytes memory) {
-        return data;
     }
 
     function internal_addBundle(bytes memory bundle, uint256 height) internal {
@@ -83,6 +79,19 @@ contract DBB is WithRedis, WithRedisPubsub, WithBuilder {
         return maxMsgs;
     }
 
-    function buildBlock() public {
+    /* Test functions */
+    function ping(bytes memory data) public returns (bytes memory) {
+        return data;
     }
+
+    function push_message(bytes memory data) public {
+        pubsub().subscribe("test-topic");
+        pubsub().publish("test-topic", data);
+    }
+
+    function get_message() public returns (bytes memory) {
+        return pubsub().get_message("test-topic");
+    }
+    /* */
+
 }

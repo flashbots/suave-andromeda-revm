@@ -35,6 +35,7 @@ pub enum RedisPubsubError {
 }
 
 use redis::{self, Commands, PubSub};
+use reth_primitives::hex::ToHex;
 
 use crate::external_services::common::CallContext;
 
@@ -77,6 +78,7 @@ impl RedisPubsub {
         thread::spawn(move || {
             // Qing messages incoming on notify_rx into temp_messages for later consumption
             while let Ok((topic, addr, msg_data)) = notify_rx.recv() {
+                println!("received msg {} {} {:?}", topic, addr, msg_data);
                 let mut messages_map = temp_messages_clone.lock().unwrap();
                 match messages_map.get_mut(&(topic.clone(), addr)) {
                     None => {
@@ -154,7 +156,7 @@ impl RedisPubsub {
 
             subscriber
                 .pubsub
-                .set_read_timeout(Some(Duration::from_secs(1)))
+                .set_read_timeout(Some(Duration::from_millis(10)))
                 .unwrap();
 
             loop {
@@ -162,6 +164,7 @@ impl RedisPubsub {
                     match subscriber.subscribers.get_mut(&topic) {
                         None => {
                             subscriber.subscribers.insert(topic.clone(), addr);
+                            println!("subscribing to {} {}", topic, addr);
                             let _ = subscriber.pubsub.subscribe(&topic).map_err(|e| {
                                 println!("{}", e);
                                 RedisPubsubError::ConnectionFailure
@@ -200,6 +203,7 @@ impl RedisPubsub {
                         println!("{}", _e);
                     }
                     Ok(msg) => {
+                        println!("new message {:?}", msg);
                         let topic = msg.get_channel_name();
                         if let Some(sub) = subscriber.subscribers.get(topic) {
                             notify_tx
@@ -212,7 +216,6 @@ impl RedisPubsub {
                         } else {
                             // Unexpected!
                             subscriber.pubsub.unsubscribe(topic).unwrap();
-                            assert!(false);
                         }
                     }
                 };
@@ -244,10 +247,7 @@ impl RedisPubsub {
         )
         .map_err(|_e| RedisPubsubError::InvalidCalldata)?;
 
-        let caller = context.1.to_string();
-        if !topic.starts_with(&caller) {
-            topic = caller + &topic;
-        }
+        topic = format!("{}:{}", context.1.encode_hex::<String>(), &topic);
 
         let mut conn = self.client.get_connection().map_err(|e| {
             println!("{}", e);
@@ -275,21 +275,18 @@ impl RedisPubsub {
         )
         .map_err(|_e| RedisPubsubError::InvalidCalldata)?;
 
-        let caller = context.1.to_string();
-        if !topic.starts_with(&caller) {
-            topic = caller + &topic;
-        }
+        topic = format!("{}:{}", context.1.encode_hex::<String>(), &topic);
 
         let mut messages_map = self.temp_messages.lock().unwrap();
+        println!("getting for {} from msgs {:?}", topic, messages_map);
         match messages_map.get_mut(&(topic, context.1)) {
             None => Ok(encode(&[Token::Bytes(vec![])])),
             Some(messages_vec) => match messages_vec.first_mut() {
                 None => Ok(encode(&[Token::Bytes(vec![])])),
                 Some(msg_data) => {
-                    let mut msg_vec: Vec<u8> = Vec::new();
-                    msg_vec.copy_from_slice(msg_data);
+                    let ret_data = Token::Bytes(msg_data.clone());
                     messages_vec.remove(0);
-                    Ok(encode(&[Token::Bytes(msg_vec)]))
+                    Ok(encode(&[ret_data]))
                 }
             },
         }
@@ -307,10 +304,7 @@ impl RedisPubsub {
         )
         .map_err(|_e| RedisPubsubError::InvalidCalldata)?;
 
-        let caller = context.1.to_string();
-        if !topic.starts_with(&caller) {
-            topic = caller + &topic;
-        }
+        topic = format!("{}:{}", context.1.encode_hex::<String>(), &topic);
 
         self.subscribe_tx.send((topic, context.1)).unwrap();
 
@@ -329,10 +323,7 @@ impl RedisPubsub {
         )
         .map_err(|_e| RedisPubsubError::InvalidCalldata)?;
 
-        let caller = context.1.to_string();
-        if !topic.starts_with(&caller) {
-            topic = caller + &topic;
-        }
+        topic = format!("{}:{}", context.1.encode_hex::<String>(), &topic);
 
         self.unsubscribe_tx.send((topic, context.1)).unwrap();
 

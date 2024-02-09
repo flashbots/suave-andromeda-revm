@@ -63,7 +63,7 @@ impl ServicesManager {
         )
         .map_err(|_e| ServiceError::InvalidCalldata)?;
 
-        let sha2_hash = sha2::Sha256::digest(&config).to_vec();
+        let sha2_hash = sha2::Sha256::digest(inputs).to_vec();
         let config_hash = H256::from_slice(&sha2_hash);
 
         if let Some(_s) = self.service_handles.get(&config_hash) {
@@ -101,11 +101,23 @@ impl ServicesManager {
         let mut selector: [u8; 4] = [0; 4];
         selector.copy_from_slice(&cdata[0..4]);
 
-        println!("-> selector: {:?}", &selector);
-
         match self.service_handles.get_mut(&handle) {
             None => Err(ServiceError::ServiceNotInitialized),
-            Some(service) => service.call(selector, context, &cdata[4..]),
+            Some(service) => match service.function_name_from_selector(&selector) {
+                Some(fn_name) => {
+                    let ret = service.call(fn_name.as_str(), context, &cdata[4..]);
+                    println!("call {}::{} -> {:?}", service.name(), &fn_name, ret);
+                    return ret;
+                }
+                None => {
+                    println!(
+                        "invalid {} call with selector {:?}",
+                        service.name(),
+                        selector.as_slice()
+                    );
+                    Err(ServiceError::InvalidCall)
+                }
+            },
         }
     }
 }
@@ -123,101 +135,132 @@ pub enum ServiceError {
 }
 
 pub trait Service {
+    fn name(&self) -> String;
+    fn function_name_from_selector(&self, selector: &[u8; 4]) -> Option<String>;
     fn instantiate(&self, config: Bytes) -> Result<(), ServiceError>;
     fn call(
         &mut self,
-        selector: [u8; 4],
+        fn_name: &str,
         context: CallContext,
         inputs: &[u8],
     ) -> Result<ethers::abi::Bytes, ServiceError>;
 }
 
 impl Service for RedisService {
+    fn name(&self) -> String {
+        String::from("redis")
+    }
+
+    fn function_name_from_selector(&self, selector: &[u8; 4]) -> Option<String> {
+        match self.redis_abi.methods.get(selector) {
+            Some((fn_name, _)) => Some(fn_name.clone()),
+            None => None,
+        }
+    }
+
     fn instantiate(&self, config: Bytes) -> Result<(), ServiceError> {
         if config.len() != 0 {
             return Err(ServiceError::InstantiationError(String::from(
                 "unexpected config passed",
             )));
         }
+
+        println!("instantiated redis with {:?}", self.redis_abi.methods);
+
         Ok(())
     }
 
     fn call(
         &mut self,
-        selector: [u8; 4],
+        fn_name: &str,
         context: CallContext,
         inputs: &[u8],
     ) -> Result<ethers::abi::Bytes, ServiceError> {
-        if let Some(called_fn) = self.redis_abi.methods.get(&selector) {
-            println!("{}", called_fn.0.as_str());
-            match called_fn.0.as_str() {
-                "get" => self.get(context, inputs),
-                "set" => self.set(context, inputs),
-                _ => Err(RedisServiceError::InvalidCall),
-            }
-            .map_err(|e| ServiceError::RedisServiceError(e))
-        } else {
-            Err(ServiceError::InvalidCall)
+        match fn_name {
+            "get" => self.get(context, inputs),
+            "set" => self.set(context, inputs),
+            _ => Err(RedisServiceError::InvalidCall),
         }
+        .map_err(|e| ServiceError::RedisServiceError(e))
     }
 }
 
 impl Service for RedisPubsub {
+    fn name(&self) -> String {
+        String::from("pubsub")
+    }
+
+    fn function_name_from_selector(&self, selector: &[u8; 4]) -> Option<String> {
+        match self.pubsub_abi.methods.get(selector) {
+            Some((fn_name, _)) => Some(fn_name.clone()),
+            None => None,
+        }
+    }
+
     fn instantiate(&self, config: Bytes) -> Result<(), ServiceError> {
         if config.len() != 0 {
             return Err(ServiceError::InstantiationError(String::from(
                 "unexpected config passed",
             )));
         }
+
+        println!("instantiated pubsub with {:?}", self.pubsub_abi.methods);
+
         Ok(())
     }
 
     fn call(
         &mut self,
-        selector: [u8; 4],
+        fn_name: &str,
         context: CallContext,
         inputs: &[u8],
     ) -> Result<ethers::abi::Bytes, ServiceError> {
-        if let Some(called_fn) = self.pubsub_abi.methods.get(&selector) {
-            match called_fn.0.as_str() {
-                "publish" => self.publish(context, inputs),
-                "subscribe" => self.subscribe(context, inputs),
-                "get_message" => self.get_message(context, inputs),
-                "unsubscribe" => self.unsubscribe(context, inputs),
-                _ => Err(RedisPubsubError::InvalidCall),
-            }
-            .map_err(|e| ServiceError::RedisPubsubError(e))
-        } else {
-            Err(ServiceError::InvalidCall)
+        match fn_name {
+            "publish" => self.publish(context, inputs),
+            "subscribe" => self.subscribe(context, inputs),
+            "get_message" => self.get_message(context, inputs),
+            "unsubscribe" => self.unsubscribe(context, inputs),
+            _ => Err(RedisPubsubError::InvalidCall),
         }
+        .map_err(|e| ServiceError::RedisPubsubError(e))
     }
 }
 
 impl Service for BuilderService {
+    fn name(&self) -> String {
+        String::from("builder")
+    }
+
+    fn function_name_from_selector(&self, selector: &[u8; 4]) -> Option<String> {
+        match self.builder_abi.methods.get(selector) {
+            Some((fn_name, _)) => Some(fn_name.clone()),
+            None => None,
+        }
+    }
+
     fn instantiate(&self, config: Bytes) -> Result<(), ServiceError> {
         if config.len() == 0 {
             return Err(ServiceError::InstantiationError(String::from(
                 "missing config",
             )));
         }
+
+        println!("instantiated builder with {:?}", self.builder_abi.methods);
+
         Ok(())
     }
 
     fn call(
         &mut self,
-        selector: [u8; 4],
+        fn_name: &str,
         _context: CallContext,
         inputs: &[u8],
     ) -> Result<ethers::abi::Bytes, ServiceError> {
-        if let Some(called_fn) = self.builder_abi.methods.get(&selector) {
-            match called_fn.0.as_str() {
-                "simulate" => self.simulate(inputs),
-                "buildBlock" => self.build_block(inputs),
-                _ => Err(BuilderError::InvalidCall),
-            }
-            .map_err(|e| ServiceError::BuilderError(e))
-        } else {
-            Err(ServiceError::InvalidCall)
+        match fn_name {
+            "simulate" => self.simulate(inputs),
+            "buildBlock" => self.build_block(inputs),
+            _ => Err(BuilderError::InvalidCall),
         }
+        .map_err(|e| ServiceError::BuilderError(e))
     }
 }

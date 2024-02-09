@@ -44,14 +44,16 @@ impl ServicesManagerHttpServer {
 
         match sm.run(&buf) {
             Ok(resp_bytes) => Response::from_data(resp_bytes),
-            Err(e) => Response::from_data(format!("{:?}", e)).with_status_code(500),
+            Err(e) => {
+                println!("-> {:?}", e);
+                Response::from_data(format!("{:?}", e)).with_status_code(500)
+            }
         }
     }
 
     pub fn process_one(&self, sm: &mut ServicesManager) -> Result<(), ServerError> {
         match self.server.recv() {
             Ok(mut req) => {
-                println!("{:?}", req);
                 let handler = (|| {
                     for (route_re, handler) in self.routes.iter() {
                         if route_re.is_match(req.url()) {
@@ -62,10 +64,10 @@ impl ServicesManagerHttpServer {
                 })()?;
 
                 let response = handler(self, sm, &mut req);
-                println!("-> {:?}", &response.status_code());
+                println!("{:?} -> {:?}", req, &response.status_code());
                 match req.respond(response) {
                     Err(e) => Err(ServerError::HttpRespError(e)),
-                    Ok(_x) => Ok(()),
+                    Ok(_) => Ok(()),
                 }
             }
             Err(e) => {
@@ -131,11 +133,18 @@ mod tests {
 
     use suave_andromeda_revm::new_andromeda_revm;
 
-    pub static DBB_JSON_ABI: Lazy<JsonAbi> =
-        Lazy::new(|| serde_json::from_str(include_str!("../../../out/DBB.sol/DBB.json")).unwrap());
+    pub static SAMPLE_JSON_ABI: Lazy<JsonAbi> = Lazy::new(|| {
+        serde_json::from_str(include_str!(
+            "../../../out/ServicesSample.sol/StoreServiceSample.json"
+        ))
+        .unwrap()
+    });
 
-    pub static DBB_ABI: Lazy<ethers::abi::Abi> = Lazy::new(|| {
-        serde_json::from_str(include_str!("../../../out/DBB.sol/DBB.abi.json")).unwrap()
+    pub static SAMPLE_ABI: Lazy<ethers::abi::Abi> = Lazy::new(|| {
+        serde_json::from_str(include_str!(
+            "../../../out/ServicesSample.sol/StoreServiceSample.abi.json"
+        ))
+        .unwrap()
     });
 
     static ADDR_A: Address = address!("4838b106fce9647bdf1e7877bf73ce8b0bad5f97");
@@ -169,15 +178,15 @@ mod tests {
         let mut db = InMemoryDB::default();
 
         let mut env = Env::default();
-        let mut evm = new_andromeda_revm(&mut db, &mut env, None);
 
         /* Deploy the contract */
 
-        let dbb_addr: Address = (|| {
+        let sample_contract_addr: Address = (|| {
+            let mut evm = new_andromeda_revm(&mut db, &mut env, None);
             evm.context.env.tx = TxEnv {
                 caller: ADDR_A,
                 transact_to: revm::primitives::TransactTo::create(),
-                data: revm::primitives::Bytes::from(DBB_JSON_ABI.bytecode().unwrap().0),
+                data: revm::primitives::Bytes::from(SAMPLE_JSON_ABI.bytecode().unwrap().0),
                 ..Default::default()
             };
             let exec_result = evm.transact().unwrap();
@@ -191,14 +200,19 @@ mod tests {
             Err("call did not result in create")
         })()?;
 
-        let dbb_contract_abi: BaseContract = BaseContract::from(DBB_ABI.clone());
+        let sample_contract_abi: BaseContract = BaseContract::from(SAMPLE_ABI.clone());
 
+        /* Smaller integration tests */
         {
-            let msg = Token::Bytes(vec![0x01, 0x42]);
-            let calldata = dbb_contract_abi.encode("ping", msg).unwrap();
+            /* Ping */
+            let mut tmp_db = db.clone();
+            let mut evm = new_andromeda_revm(&mut tmp_db, &mut env, None);
+            let calldata = sample_contract_abi
+                .encode("ping", Token::Bytes(vec![0x01, 0x42]))
+                .unwrap();
             evm.context.env.tx = TxEnv {
                 caller: ADDR_A,
-                transact_to: revm::primitives::TransactTo::Call(dbb_addr),
+                transact_to: revm::primitives::TransactTo::Call(sample_contract_addr),
                 data: revm::primitives::Bytes::from(calldata.0),
                 ..Default::default()
             };
@@ -206,12 +220,57 @@ mod tests {
             assert!(exec_result.result.is_success());
 
             let output = exec_result.result.into_output().unwrap();
-            let pong: ethers::abi::Bytes = dbb_contract_abi.decode_output("ping", output).unwrap();
+            let pong: ethers::abi::Bytes =
+                sample_contract_abi.decode_output("ping", output).unwrap();
             assert_eq!(pong, ethers::abi::Bytes::from(vec![0x01, 0x42]));
         }
 
         {
-            let calldata = dbb_contract_abi
+            /* Test redis pubsub - requires redis running! */
+            {
+                let mut tmp_db = db.clone();
+                let mut evm = new_andromeda_revm(&mut tmp_db, &mut env, None);
+                let calldata = sample_contract_abi
+                    .encode("push_message", Token::Bytes(vec![0x01, 0x42]))
+                    .unwrap();
+                evm.context.env.tx = TxEnv {
+                    caller: ADDR_A,
+                    transact_to: revm::primitives::TransactTo::Call(sample_contract_addr),
+                    data: revm::primitives::Bytes::from(calldata.0),
+                    ..Default::default()
+                };
+                let exec_result = evm.transact().unwrap();
+                assert!(exec_result.result.is_success());
+            }
+
+            // Let the message propagate
+            thread::sleep(Duration::from_millis(500));
+
+            {
+                let mut tmp_db = db.clone();
+                let mut evm = new_andromeda_revm(&mut tmp_db, &mut env, None);
+                let calldata = sample_contract_abi.encode("get_message", ()).unwrap();
+                evm.context.env.tx = TxEnv {
+                    caller: ADDR_A,
+                    transact_to: revm::primitives::TransactTo::Call(sample_contract_addr),
+                    data: revm::primitives::Bytes::from(calldata.0),
+                    ..Default::default()
+                };
+                let exec_result = evm.transact().unwrap();
+                assert!(exec_result.result.is_success());
+
+                let output = exec_result.result.into_output().unwrap();
+                let pong: ethers::abi::Bytes =
+                    sample_contract_abi.decode_output("ping", output).unwrap();
+                assert_eq!(pong, ethers::abi::Bytes::from(vec![0x01, 0x42]));
+            }
+        }
+
+        /* More complex behaviour */
+        {
+            let mut tmp_db = db.clone();
+            let mut evm = new_andromeda_revm(&mut tmp_db, &mut env, None);
+            let calldata = sample_contract_abi
                 .encode(
                     "addBundle",
                     ((
@@ -223,7 +282,7 @@ mod tests {
                 .unwrap();
             evm.context.env.tx = TxEnv {
                 caller: ADDR_A,
-                transact_to: revm::primitives::TransactTo::Call(dbb_addr),
+                transact_to: revm::primitives::TransactTo::Call(sample_contract_addr),
                 data: revm::primitives::Bytes::from(calldata.0),
                 ..Default::default()
             };
@@ -235,17 +294,18 @@ mod tests {
         }
 
         {
-            let calldata = dbb_contract_abi
+            let mut tmp_db = db.clone();
+            let mut evm = new_andromeda_revm(&mut tmp_db, &mut env, None);
+            let calldata = sample_contract_abi
                 .encode("getBundlesByHeight", (Token::Uint(U256::from(31)),))
                 .unwrap();
             evm.context.env.tx = TxEnv {
                 caller: ADDR_A,
-                transact_to: revm::primitives::TransactTo::Call(dbb_addr),
+                transact_to: revm::primitives::TransactTo::Call(sample_contract_addr),
                 data: revm::primitives::Bytes::from(calldata.0),
                 ..Default::default()
             };
             let exec_result = evm.transact().unwrap().result;
-            println!("result: {:?}", exec_result);
             assert!(exec_result.is_success());
 
             let output = exec_result.into_output().unwrap();

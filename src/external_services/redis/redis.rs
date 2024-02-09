@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use ethers::abi::{encode, parse_abi, Contract, Detokenize, Token};
+use ethers::abi::{encode, Contract, Detokenize, Token};
 use ethers::contract::{BaseContract, Lazy};
 use ethers::types::Bytes;
 
