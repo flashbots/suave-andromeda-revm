@@ -1,0 +1,132 @@
+[
+  {
+    "type": "function",
+    "name": "addTransaction",
+    "inputs": [
+      {
+        "name": "sessionId",
+        "type": "string",
+        "internalType": "string"
+      },
+      {
+        "name": "tx",
+        "type": "bytes",
+        "internalType": "bytes"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "tuple",
+        "internalType": "struct Builder.SimResult",
+        "components": [
+          {
+            "name": "profit",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "buildBlock",
+    "inputs": [
+      {
+        "name": "bundle",
+        "type": "tuple[]",
+        "internalType": "struct Builder.Bundle[]",
+        "components": [
+          {
+            "name": "height",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "transaction",
+            "type": "bytes",
+            "internalType": "bytes"
+          },
+          {
+            "name": "profit",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "tuple",
+        "internalType": "struct Builder.Block",
+        "components": [
+          {
+            "name": "profit",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "newSession",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "sessionId",
+        "type": "string",
+        "internalType": "string"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "simulate",
+    "inputs": [
+      {
+        "name": "bundle",
+        "type": "tuple",
+        "internalType": "struct Builder.Bundle",
+        "components": [
+          {
+            "name": "height",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "transaction",
+            "type": "bytes",
+            "internalType": "bytes"
+          },
+          {
+            "name": "profit",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ]
+      }
+    ],
+    "outputs": [
+      {
+        "name": "",
+        "type": "tuple",
+        "internalType": "struct Builder.SimResult",
+        "components": [
+          {
+            "name": "profit",
+            "type": "uint256",
+            "internalType": "uint256"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "nonpayable"
+  }
+]
