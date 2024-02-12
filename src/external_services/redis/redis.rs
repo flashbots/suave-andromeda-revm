@@ -39,11 +39,11 @@ pub struct RedisService {
 }
 
 impl RedisService {
-    pub fn new() -> Self {
+    pub fn new(endpoint: String) -> Self {
         let redis_contract = REDIS_ABI.clone();
         let redis_abi = redis_contract.abi();
 
-        let client = redis::Client::open("redis://127.0.0.1:6379/").unwrap();
+        let client = redis::Client::open(endpoint).unwrap();
 
         RedisService {
             _client: client,

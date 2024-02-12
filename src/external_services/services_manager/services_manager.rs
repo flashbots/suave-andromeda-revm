@@ -23,16 +23,24 @@ pub fn service_manager_contract() -> BaseContract {
 }
 
 pub struct ServicesManager {
+    config: Config,
     pub _sm_contract: BaseContract,
     get_service_fn_abi: ethers::abi::Function,
     call_service_fn_abi: ethers::abi::Function,
     service_handles: HashMap<H256, Box<dyn Service>>,
 }
 
+#[derive(Clone)]
+pub struct Config {
+    pub kv_redis_endpoint: String,
+    pub pubsub_redis_endpoint: String,
+}
+
 impl ServicesManager {
-    pub fn new() -> Self {
+    pub fn new(config: Config) -> Self {
         let sm_abi = SERVICES_MANAGER_ABI.abi();
         ServicesManager {
+            config,
             _sm_contract: service_manager_contract(),
             get_service_fn_abi: sm_abi.function("getService").unwrap().clone(),
             call_service_fn_abi: sm_abi.function("callServiceWithContext").unwrap().clone(),
@@ -75,8 +83,14 @@ impl ServicesManager {
 
         // TODO: define elsewhere
         let service: Box<dyn Service> = match service_name.as_str() {
-            "redis" => Ok(Box::new(RedisService::new()) as Box<dyn Service>),
-            "pubsub" => Ok(Box::new(RedisPubsub::new()) as Box<dyn Service>),
+            "redis" => Ok(
+                Box::new(RedisService::new(self.config.kv_redis_endpoint.clone()))
+                    as Box<dyn Service>,
+            ),
+            "pubsub" => Ok(
+                Box::new(RedisPubsub::new(self.config.pubsub_redis_endpoint.clone()))
+                    as Box<dyn Service>,
+            ),
             "builder" => Ok(Box::new(BuilderService::new()) as Box<dyn Service>),
             _ => Err(ServiceError::InvalidCall),
         }?;

@@ -1,10 +1,10 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use ethers::abi::{encode, parse_abi, Address, Contract, Detokenize, Token};
+use ethers::abi::{encode, parse_abi, Address, Bytes as AbiBytes, Contract, Detokenize, Token};
 use ethers::contract::{BaseContract, Lazy};
 use ethers::types::Bytes;
 
@@ -51,7 +51,7 @@ pub struct RedisPubsub {
     subscribe_tx: Sender<(String, Address)>,
     unsubscribe_tx: Sender<(String, Address)>,
 
-    temp_messages: Arc<Mutex<HashMap<(String, Address), Vec<Vec<u8>>>>>,
+    temp_messages: Arc<Mutex<HashMap<(String, Address), VecDeque<AbiBytes>>>>,
 
     publish_fn_abi: ethers::abi::Function,
     get_message_fn_abi: ethers::abi::Function,
@@ -60,11 +60,11 @@ pub struct RedisPubsub {
 }
 
 impl RedisPubsub {
-    pub fn new() -> Self {
+    pub fn new(endpoint: String) -> Self {
         let pubsub_contract = REDIS_PUBSUB_ABI.clone();
         let pubsub_abi = pubsub_contract.abi();
 
-        let client = redis::Client::open("redis://127.0.0.1:6379/").unwrap();
+        let client = redis::Client::open(endpoint).unwrap();
 
         let (subscribe_tx, subscribe_rx) = channel::<(String, Address)>();
         let (unsubscribe_tx, unsubscribe_rx) = channel::<(String, Address)>();
@@ -81,14 +81,15 @@ impl RedisPubsub {
                 let mut messages_map = temp_messages_clone.lock().unwrap();
                 match messages_map.get_mut(&(topic.clone(), addr)) {
                     None => {
-                        messages_map.insert((topic, addr), vec![msg_data]);
+                        messages_map.insert((topic, addr), VecDeque::from([msg_data]));
                     }
                     Some(messages_vec) => {
-                        if messages_vec.len() < 50
                         /* max buffered messages */
-                        {
-                            messages_vec.push(msg_data);
+                        if messages_vec.len() >= 50 {
+                            messages_vec.pop_front();
                         }
+
+                        messages_vec.push_back(msg_data);
                     }
                 }
             }
@@ -226,8 +227,8 @@ impl RedisPubsub {
                     println!("{}", _e);
                 }
                 Ok(msg) => {
-                    println!("new message {:?}", msg);
                     let topic = msg.get_channel_name();
+                    println!("new message to {}", topic);
                     if let Some(sub) = subscriber.subscribers.get(topic) {
                         notify_tx
                             .send((
@@ -290,14 +291,10 @@ impl RedisPubsub {
         let mut messages_map = self.temp_messages.lock().unwrap();
         println!("getting for {} from msgs {:?}", topic, messages_map);
         match messages_map.get_mut(&(topic, context.1)) {
-            None => Ok(encode(&[Token::Bytes(vec![])])),
-            Some(messages_vec) => match messages_vec.first_mut() {
+            None => Ok(encode(&[Token::Bytes(Vec::new())])),
+            Some(messages_vec) => match messages_vec.pop_front() {
                 None => Ok(encode(&[Token::Bytes(vec![])])),
-                Some(msg_data) => {
-                    let ret_data = Token::Bytes(msg_data.clone());
-                    messages_vec.remove(0);
-                    Ok(encode(&[ret_data]))
-                }
+                Some(msg_data) => Ok(encode(&[Token::Bytes(msg_data)])),
             },
         }
     }

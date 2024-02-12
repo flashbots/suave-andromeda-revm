@@ -1,15 +1,39 @@
 use regex::Regex;
-use std::env;
+
+use clap::Parser;
 
 use std::io::{Cursor, Error as IoError};
 
 use tiny_http::{Request, Response, Server};
 
-use suave_andromeda_revm::services_manager::ServicesManager;
+use suave_andromeda_revm::services_manager::{self, ServicesManager};
 
 pub type CallResponse = Response<Cursor<Vec<u8>>>;
 type HandlerFn =
     fn(&ServicesManagerHttpServer, sm: &mut ServicesManager, req: &mut Request) -> CallResponse;
+
+#[derive(Parser)]
+struct Cli {
+    /// The rpc endpoint to connect to
+    #[arg(short, long, default_value_t = String::from("redis://127.0.0.1:6379/"))]
+    kv_redis_endpoint: String,
+    #[arg(short, long, default_value_t = String::from("redis://127.0.0.1:6379/"))]
+    pubsub_redis_endpoint: String,
+    #[arg(short, long, default_value_t = String::from("0.0.0.0"))]
+    host: String,
+    #[arg(short, long, default_value_t = String::from("5605"))]
+    port: String,
+}
+
+fn main() {
+    let cli_args = Cli::parse();
+    let server = ServicesManagerHttpServer::new(cli_args.host, cli_args.port);
+    let mut sm = ServicesManager::new(services_manager::Config {
+        kv_redis_endpoint: cli_args.kv_redis_endpoint,
+        pubsub_redis_endpoint: cli_args.pubsub_redis_endpoint,
+    });
+    server.process_forever(&mut sm);
+}
 
 #[derive(Debug)]
 enum ServerError {
@@ -25,8 +49,8 @@ struct ServicesManagerHttpServer {
 }
 
 impl ServicesManagerHttpServer {
-    pub fn new(port: String) -> Self {
-        let server = Server::http(format!("0.0.0.0:{}", &port)).unwrap();
+    pub fn new(host: String, port: String) -> Self {
+        let server = Server::http(format!("{}:{}", &host, &port)).unwrap();
 
         let routes: Vec<(Regex, HandlerFn)> = vec![(
             Regex::new(r#"^/$"#).unwrap(),
@@ -60,7 +84,7 @@ impl ServicesManagerHttpServer {
                             return Ok(handler);
                         }
                     }
-                    return Err(ServerError::RouteNotFoundError);
+                    Err(ServerError::RouteNotFoundError)
                 })()?;
 
                 let response = handler(self, sm, &mut req);
@@ -74,16 +98,14 @@ impl ServicesManagerHttpServer {
                 if e.to_string() == "thread unblocked" {
                     return Err(ServerError::Stop);
                 }
-                return Err(ServerError::HttpRecvError(e));
+                Err(ServerError::HttpRecvError(e))
             }
         }
     }
 
-    pub fn process_forever(&self) {
-        let mut sm = ServicesManager::new();
-
+    pub fn process_forever(&self, sm: &mut ServicesManager) {
         loop {
-            match self.process_one(&mut sm) {
+            match self.process_one(sm) {
                 Ok(_) => (),
                 Err(ServerError::RouteNotFoundError) => {
                     println!("incorrect route requested");
@@ -98,16 +120,6 @@ impl ServicesManagerHttpServer {
             };
         }
     }
-}
-
-fn main() {
-    let port: String = match env::var("PORT") {
-        Ok(p) => p,
-        _ => String::from("5605"),
-    };
-
-    let server = ServicesManagerHttpServer::new(port);
-    server.process_forever();
 }
 
 #[cfg(test)]
@@ -151,7 +163,10 @@ mod tests {
 
     #[test]
     fn simulate() -> Result<(), String> {
-        let server = Arc::new(super::ServicesManagerHttpServer::new(String::from("5605")));
+        let server = Arc::new(super::ServicesManagerHttpServer::new(
+            String::from("0.0.0.0"),
+            String::from("5605"),
+        ));
         let server_handle_clone = server.clone();
 
         let thread_barrier = Arc::new(Barrier::new(2));
@@ -159,7 +174,12 @@ mod tests {
 
         let server_thread = thread::spawn(move || {
             thread_barrier_clone.wait();
-            server_handle_clone.process_forever();
+            let local_redis_endpoint = "redis://127.0.0.1:6379";
+            let mut sm = super::ServicesManager::new(super::services_manager::Config {
+                kv_redis_endpoint: local_redis_endpoint.into(),
+                pubsub_redis_endpoint: local_redis_endpoint.into(),
+            });
+            server_handle_clone.process_forever(&mut sm);
         });
 
         thread_barrier.wait();
