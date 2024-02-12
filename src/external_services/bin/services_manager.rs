@@ -147,14 +147,14 @@ mod tests {
 
     pub static SAMPLE_JSON_ABI: Lazy<JsonAbi> = Lazy::new(|| {
         serde_json::from_str(include_str!(
-            "../../../out/ServicesSample.sol/StoreServiceSample.json"
+            "../../out/ServicesSample.sol/StoreServiceSample.json"
         ))
         .unwrap()
     });
 
     pub static SAMPLE_ABI: Lazy<ethers::abi::Abi> = Lazy::new(|| {
         serde_json::from_str(include_str!(
-            "../../../out/ServicesSample.sol/StoreServiceSample.abi.json"
+            "../../out/ServicesSample.sol/StoreServiceSample.abi.json"
         ))
         .unwrap()
     });

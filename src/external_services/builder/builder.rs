@@ -4,7 +4,7 @@ use ethers::contract::{BaseContract, Lazy};
 
 pub static BUILDER_ABI: Lazy<BaseContract> = Lazy::new(|| {
     let contract: Contract =
-        serde_json::from_str(include_str!("../../../out/Builder.sol/Builder.abi.json")).unwrap();
+        serde_json::from_str(include_str!("../../out/Builder.sol/Builder.abi.json")).unwrap();
     BaseContract::from(contract)
 });
 

@@ -14,7 +14,7 @@ use crate::redis::{RedisService, RedisServiceError};
 
 pub static SERVICES_MANAGER_ABI: Lazy<BaseContract> = Lazy::new(|| {
     let contract: Contract =
-        serde_json::from_str(include_str!("../../../out/ServicesManager.sol/SM.abi.json")).unwrap();
+        serde_json::from_str(include_str!("../../out/ServicesManager.sol/SM.abi.json")).unwrap();
     BaseContract::from(contract)
 });
 

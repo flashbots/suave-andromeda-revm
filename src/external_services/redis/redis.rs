@@ -8,7 +8,7 @@ use crate::external_services::common::CallContext;
 
 pub static REDIS_ABI: Lazy<BaseContract> = Lazy::new(|| {
     let contract: Contract =
-        serde_json::from_str(include_str!("../../../out/Redis.sol/Redis.abi.json")).unwrap();
+        serde_json::from_str(include_str!("../../out/Redis.sol/Redis.abi.json")).unwrap();
     BaseContract::from(contract)
 });
 

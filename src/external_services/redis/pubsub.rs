@@ -10,7 +10,7 @@ use ethers::types::Bytes;
 
 pub static REDIS_PUBSUB_ABI: Lazy<BaseContract> = Lazy::new(|| {
     let contract: Contract =
-        serde_json::from_str(include_str!("../../../out/Pubsub.sol/RedisPubsub.abi.json")).unwrap();
+        serde_json::from_str(include_str!("../../out/Pubsub.sol/RedisPubsub.abi.json")).unwrap();
     BaseContract::from(contract)
 });
 
