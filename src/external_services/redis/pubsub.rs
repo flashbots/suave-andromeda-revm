@@ -246,7 +246,7 @@ impl RedisPubsub {
     }
 
     pub fn publish(
-        &mut self,
+        &self,
         context: CallContext,
         inputs: &[u8],
     ) -> Result<ethers::abi::Bytes, RedisPubsubError> {
@@ -274,7 +274,7 @@ impl RedisPubsub {
     }
 
     pub fn get_message(
-        &mut self,
+        &self,
         context: CallContext,
         inputs: &[u8],
     ) -> Result<ethers::abi::Bytes, RedisPubsubError> {
@@ -303,7 +303,7 @@ impl RedisPubsub {
     }
 
     pub fn subscribe(
-        &mut self,
+        &self,
         context: CallContext,
         inputs: &[u8],
     ) -> Result<ethers::abi::Bytes, RedisPubsubError> {
@@ -322,7 +322,7 @@ impl RedisPubsub {
     }
 
     pub fn unsubscribe(
-        &mut self,
+        &self,
         context: CallContext,
         inputs: &[u8],
     ) -> Result<ethers::abi::Bytes, RedisPubsubError> {

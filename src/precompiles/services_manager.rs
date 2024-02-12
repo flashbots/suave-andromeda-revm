@@ -1,7 +1,8 @@
 use lazy_static::lazy_static;
 use reqwest::blocking::Client as ReqwestClient;
+use sha2::*;
 
-use ethers::abi::{encode, AbiEncode, Bytes as AbiBytes, Token};
+use ethers::abi::{encode, Bytes as AbiBytes, Token};
 use ethers::types::{Address, Bytes, H256};
 
 use revm::precompile::{
@@ -68,6 +69,26 @@ fn get_service(input: &[u8], gas_limit: u64, env: &Env) -> PrecompileResult {
         return Err(PrecompileError::OutOfGas);
     }
 
+    let mut handle_bytes: Vec<u8> = Vec::from(input);
+    handle_bytes.extend_from_slice(env.msg.caller.0.as_slice());
+    let handle_hash = sha2::Sha256::digest(handle_bytes).to_vec();
+    let contract_handle = H256::from_slice(&handle_hash);
+
+    if GLOBAL_SM
+        .lock()
+        .unwrap()
+        .service_handles
+        .contains_key(&contract_handle)
+    {
+        return Ok((
+            gas_used,
+            encode(&[
+                Token::Uint(ethers::types::U256::from(contract_handle.0)),
+                Token::String(String::new()),
+            ]),
+        ));
+    }
+
     // TODO: configure elsewhere
     let instantiate_resp_raw = send_to_requests_manager(input, "http://127.0.0.1:5605/");
     if let Err(e) = instantiate_resp_raw {
@@ -75,7 +96,6 @@ fn get_service(input: &[u8], gas_limit: u64, env: &Env) -> PrecompileResult {
         return Err(INSTANTIATE_FAILED);
     };
 
-    // Handle should really just be a salted hash of the (service_name, config)
     let instantiate_resp = instantiate_resp_raw.unwrap();
     let (service_handle, err): (H256, Bytes) = SERVICES_MANAGER_ABI
         .decode_output("getService", &instantiate_resp)
@@ -84,18 +104,12 @@ fn get_service(input: &[u8], gas_limit: u64, env: &Env) -> PrecompileResult {
         return Ok((gas_used, instantiate_resp));
     }
 
-    let contract_handle = H256::random();
-
-    // Only whoever knows the random handle can access the service
-    // Should probably be done at the contract level using secure random
     GLOBAL_SM
         .lock()
         .unwrap()
         .service_handles
         .insert(contract_handle, (env.msg.caller, service_handle));
 
-    let mut ret = service_handle.encode();
-    ret.extend(ethers::abi::Bytes::new());
     Ok((
         gas_used,
         encode(&[

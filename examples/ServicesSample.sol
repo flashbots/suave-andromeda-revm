@@ -80,7 +80,7 @@ contract StoreServiceSample is WithRedis, WithRedisPubsub, WithBuilder {
     }
 
     /* Test functions */
-    function ping(bytes memory data) public returns (bytes memory) {
+    function ping(bytes memory data) pure public returns (bytes memory) {
         return data;
     }
 
