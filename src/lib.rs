@@ -12,6 +12,7 @@ pub use evm::new_andromeda_revm;
 pub mod precompiles {
     pub mod lib;
     pub mod sgxattest;
+    pub mod crypto;
 }
 
 pub use precompiles::lib::{andromeda_precompiles, sgx_precompiles};
