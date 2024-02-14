@@ -258,7 +258,7 @@ impl RedisPubsub {
         )
         .map_err(|_e| RedisPubsubError::InvalidCalldata)?;
 
-        topic = format!("{}:{}", context.1.encode_hex::<String>(), &topic);
+        topic = format!("{}:{}", context.2.encode_hex::<String>(), &topic);
 
         let mut conn = self.client.get_connection().map_err(|e| {
             println!("{}", e);
@@ -286,11 +286,11 @@ impl RedisPubsub {
         )
         .map_err(|_e| RedisPubsubError::InvalidCalldata)?;
 
-        topic = format!("{}:{}", context.1.encode_hex::<String>(), &topic);
+        topic = format!("{}:{}", context.2.encode_hex::<String>(), &topic);
 
         let mut messages_map = self.temp_messages.lock().unwrap();
         println!("getting for {} from msgs {:?}", topic, messages_map);
-        match messages_map.get_mut(&(topic, context.1)) {
+        match messages_map.get_mut(&(topic, context.2)) {
             None => Ok(encode(&[Token::Bytes(Vec::new())])),
             Some(messages_vec) => match messages_vec.pop_front() {
                 None => Ok(encode(&[Token::Bytes(vec![])])),
@@ -311,9 +311,9 @@ impl RedisPubsub {
         )
         .map_err(|_e| RedisPubsubError::InvalidCalldata)?;
 
-        topic = format!("{}:{}", context.1.encode_hex::<String>(), &topic);
+        topic = format!("{}:{}", context.2.encode_hex::<String>(), &topic);
 
-        self.subscribe_tx.send((topic, context.1)).unwrap();
+        self.subscribe_tx.send((topic, context.2)).unwrap();
 
         Ok(vec![])
     }
@@ -330,9 +330,9 @@ impl RedisPubsub {
         )
         .map_err(|_e| RedisPubsubError::InvalidCalldata)?;
 
-        topic = format!("{}:{}", context.1.encode_hex::<String>(), &topic);
+        topic = format!("{}:{}", context.2.encode_hex::<String>(), &topic);
 
-        self.unsubscribe_tx.send((topic, context.1)).unwrap();
+        self.unsubscribe_tx.send((topic, context.2)).unwrap();
 
         Ok(vec![])
     }

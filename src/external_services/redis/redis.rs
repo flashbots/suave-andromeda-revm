@@ -66,7 +66,7 @@ impl RedisService {
         )
         .map_err(|_e| RedisServiceError::InvalidCalldata)?;
 
-        let caller = context.1.to_string();
+        let caller = context.2.to_string();
         if !key.starts_with(&caller) {
             key = caller + &key;
         }
@@ -90,7 +90,7 @@ impl RedisService {
         )
         .map_err(|_e| RedisServiceError::InvalidCalldata)?;
 
-        let caller = context.1.to_string();
+        let caller = context.2.to_string();
         if !key.starts_with(&caller) {
             key = caller + &key;
         }
