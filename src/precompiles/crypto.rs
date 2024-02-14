@@ -20,12 +20,13 @@ fn crypto_sha512(input: &[u8], gas_limit: u64) -> PrecompileResult {
     let gas_used = 10000 as u64;
     if gas_used > gas_limit {
         return Err(PrecompileError::OutOfGas);
-    } else if input.len() < 1 {
+    } 
+    if input.len() == 0 {
         return Err(HASH512_FAILED);
-    } else {
-        let mut hasher = Sha512::new();
-        hasher.update(input);
-        let result = hasher.finalize();
-        return Ok((gas_used, result.to_vec()));
-    }
+    } 
+    let mut hasher = Sha512::new();
+    hasher.update(input);
+    let result = hasher.finalize();
+    Ok((gas_used, result.to_vec()))
+    
 }
