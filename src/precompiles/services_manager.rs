@@ -2,7 +2,8 @@ use lazy_static::lazy_static;
 use reqwest::blocking::Client as ReqwestClient;
 use sha2::*;
 
-use ethers::abi::{encode, Bytes as AbiBytes, Token};
+use ethers::abi::{encode, Bytes as AbiBytes, Contract, Token};
+use ethers::contract::{BaseContract, Lazy};
 use ethers::types::{Address, Bytes, H256};
 
 use revm::precompile::{
@@ -15,7 +16,12 @@ use std::sync::Mutex;
 
 use crate::u64_to_address;
 
-use crate::external_services::services_manager::services_manager::SERVICES_MANAGER_ABI;
+// Redefined here to avoid having to import from external services
+pub static SERVICES_MANAGER_ABI: Lazy<BaseContract> = Lazy::new(|| {
+    let contract: Contract =
+        serde_json::from_str(include_str!("../out/ServicesManager.sol/SM.abi.json")).unwrap();
+    BaseContract::from(contract)
+});
 
 pub const RUN: PrecompileWithAddress = PrecompileWithAddress::new(
     u64_to_address(0x3507),
