@@ -143,7 +143,6 @@ impl StatefulExecutor {
             true => {
                 let writer = Box::new(io::stderr());
                 let mut inspector = TracerEip3155::new(writer, true, true);
-
                 let mut evm_impl = new_andromeda_revm(&mut db, &mut env, Some(&mut inspector));
                 evm_impl.transact()
             }

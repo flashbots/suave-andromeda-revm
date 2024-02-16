@@ -3,6 +3,10 @@ name = "suave-andromeda-revm"
 version = "0.1.0"
 edition = "2021"
 
+[features]
+external_services = []
+redis_external_services = ["external_services"]
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
@@ -28,7 +32,16 @@ ssz-rs = { package = "ssz_rs", version = "0.9.0" }
 eyre = "0.6.8"
 tracing = "0.1.37"
 once_cell = "1.19.0"
+reqwest = { version = "0.11.22", features = ["blocking"] }
+tiny_http = "0.12.0"
+regex = "1.10.3"
+redis = { version = "0.24.0", features = ["tokio-comp", "connection-manager"] }
 
 [patch."https://github.com/bluealloy/revm"]
 revm = { git = "https://github.com/flashbots/revm.git", branch = "extensible-precompiles" }
 revm-primitives = { git = "https://github.com/flashbots/revm.git", branch = "extensible-precompiles" }
+
+[[bin]]
+name = "services_manager"
+required-features = ["external_services"]
+path = "src/external_services/bin/services_manager.rs"
