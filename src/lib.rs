@@ -15,8 +15,9 @@ pub mod precompiles {
     pub mod sgxattest;
 }
 
-pub use precompiles::lib::{andromeda_precompiles, sgx_precompiles, sm_precompiles};
+pub use precompiles::lib::andromeda_precompiles;
 
+#[cfg(feature = "external_services")]
 pub mod external_services {
     pub mod common;
     pub mod builder {
@@ -30,10 +31,6 @@ pub mod external_services {
         pub mod services_manager;
     }
 }
-
-pub use crate::external_services::builder::builder;
-pub use crate::external_services::redis::{pubsub, redis};
-pub use crate::external_services::services_manager::services_manager;
 
 use revm::primitives::Address;
 

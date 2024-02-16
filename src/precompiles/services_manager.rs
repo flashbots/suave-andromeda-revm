@@ -15,7 +15,7 @@ use std::sync::Mutex;
 
 use crate::u64_to_address;
 
-use crate::services_manager::SERVICES_MANAGER_ABI;
+use crate::external_services::services_manager::services_manager::SERVICES_MANAGER_ABI;
 
 pub const RUN: PrecompileWithAddress = PrecompileWithAddress::new(
     u64_to_address(0x3507),

@@ -7,10 +7,11 @@ use ethers::abi::{Contract, Token};
 use ethers::contract::{BaseContract, Lazy};
 use ethers::types::{Bytes, H256};
 
-use crate::builder::{BuilderError, BuilderService};
 use crate::external_services::common::CallContext;
-use crate::pubsub::{RedisPubsub, RedisPubsubError};
-use crate::redis::{RedisService, RedisServiceError};
+
+use crate::external_services::builder::builder::{BuilderError, BuilderService};
+use crate::external_services::redis::pubsub::{RedisPubsub, RedisPubsubError};
+use crate::external_services::redis::redis::{RedisService, RedisServiceError};
 
 pub static SERVICES_MANAGER_ABI: Lazy<BaseContract> = Lazy::new(|| {
     let contract: Contract =
@@ -83,14 +84,18 @@ impl ServicesManager {
 
         // TODO: define elsewhere
         let service: Box<dyn Service> = match service_name.as_str() {
+            #[cfg(feature = "redis_external_services")]
             "redis" => Ok(
                 Box::new(RedisService::new(self.config.kv_redis_endpoint.clone()))
                     as Box<dyn Service>,
             ),
+            #[cfg(feature = "redis_external_services")]
             "pubsub" => Ok(
                 Box::new(RedisPubsub::new(self.config.pubsub_redis_endpoint.clone()))
                     as Box<dyn Service>,
             ),
+            #[cfg(not(feature = "redis_external_services"))]
+            "redis" | "pubsub" => Err(ServiceError::ServiceUnavailable),
             "builder" => Ok(Box::new(BuilderService::new()) as Box<dyn Service>),
             _ => Err(ServiceError::InvalidCall),
         }?;
@@ -145,6 +150,7 @@ pub enum ServiceError {
     InstantiationError(String),
     InvalidCall,
     InvalidCalldata,
+    ServiceUnavailable,
     ServiceNotInitialized,
 }
 

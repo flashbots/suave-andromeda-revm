@@ -6,7 +6,9 @@ use std::io::{Cursor, Error as IoError};
 
 use tiny_http::{Request, Response, Server};
 
-use suave_andromeda_revm::services_manager::{self, ServicesManager};
+use suave_andromeda_revm::external_services::services_manager::services_manager::{
+    self, ServicesManager,
+};
 
 pub type CallResponse = Response<Cursor<Vec<u8>>>;
 type HandlerFn =
@@ -245,6 +247,7 @@ mod tests {
             assert_eq!(pong, ethers::abi::Bytes::from(vec![0x01, 0x42]));
         }
 
+        #[cfg(feature = "redis_external_services")]
         {
             /* Test redis pubsub - requires redis running! */
             {
@@ -287,6 +290,7 @@ mod tests {
         }
 
         /* More complex behaviour */
+        #[cfg(feature = "redis_external_services")]
         {
             let mut tmp_db = db.clone();
             let mut evm = new_andromeda_revm(&mut tmp_db, &mut env, None);
@@ -313,6 +317,7 @@ mod tests {
             assert_eq!(output, Bytes::new());
         }
 
+        #[cfg(feature = "redis_external_services")]
         {
             let mut tmp_db = db.clone();
             let mut evm = new_andromeda_revm(&mut tmp_db, &mut env, None);

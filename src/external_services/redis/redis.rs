@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use ethers::abi::{encode, Contract, Detokenize, Token};
 use ethers::contract::{BaseContract, Lazy};
 use ethers::types::Bytes;
@@ -26,13 +24,11 @@ pub enum RedisServiceError {
     ConnectionFailure,
 }
 
-use redis;
+use redis::{self, Commands};
 
 pub struct RedisService {
-    _client: redis::Client,
+    client: redis::Client,
     pub redis_abi: BaseContract,
-
-    temp_values: HashMap<String, Bytes>,
 
     get_fn_abi: ethers::abi::Function,
     set_fn_abi: ethers::abi::Function,
@@ -46,16 +42,15 @@ impl RedisService {
         let client = redis::Client::open(endpoint).unwrap();
 
         RedisService {
-            _client: client,
+            client,
             redis_abi: redis_contract.to_owned(),
-            temp_values: HashMap::new(),
             get_fn_abi: redis_abi.function("get").unwrap().clone(),
             set_fn_abi: redis_abi.function("set").unwrap().clone(),
         }
     }
 
     pub fn get(
-        &self,
+        &mut self,
         context: CallContext,
         inputs: &[u8],
     ) -> Result<ethers::abi::Bytes, RedisServiceError> {
@@ -71,11 +66,14 @@ impl RedisService {
             key = caller + &key;
         }
 
-        if let Some(value) = self.temp_values.get(&key) {
-            return Ok(encode(&[Token::Bytes(value.to_owned().0.into())]));
+        let res: Result<Vec<u8>, _> = self.client.get(&key);
+        match res {
+            Ok(value) => Ok(encode(&[Token::Bytes(value)])),
+            Err(e) => {
+                dbg!("redis: could not get {}: {}", &key, e);
+                Ok(encode(&[Token::Bytes(vec![])]))
+            }
         }
-
-        Ok(encode(&[Token::Bytes(vec![])]))
     }
 
     pub fn set(
@@ -95,7 +93,12 @@ impl RedisService {
             key = caller + &key;
         }
 
-        self.temp_values.insert(key, value);
+        let redis_value: Vec<u8> = value.0.to_vec();
+        let res: Result<Vec<u8>, _> = self.client.set(&key, redis_value);
+        if let Err(e) = res {
+            dbg!("redis: could not set {}: {}", key, e);
+        }
+
         Ok(vec![])
     }
 }
