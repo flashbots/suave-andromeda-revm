@@ -23,10 +23,8 @@ fn crypto_sha512(input: &[u8], gas_limit: u64) -> PrecompileResult {
     } 
     if input.len() == 0 {
         return Err(HASH512_FAILED);
-    } 
-    let mut hasher = Sha512::new();
-    hasher.update(input);
-    let result = hasher.finalize();
-    Ok((gas_used, result.to_vec()))
+    }
+    let output = Sha512::digest(input).to_vec(); 
+    Ok((gas_used, output))
     
 }
