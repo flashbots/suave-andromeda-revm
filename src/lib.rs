@@ -11,11 +11,26 @@ pub use evm::new_andromeda_revm;
 
 pub mod precompiles {
     pub mod lib;
+    pub mod services_manager;
     pub mod sgxattest;
 }
 
-pub use precompiles::lib::{andromeda_precompiles, sgx_precompiles};
+pub use precompiles::lib::andromeda_precompiles;
 
+#[cfg(feature = "external_services")]
+pub mod external_services {
+    pub mod common;
+    pub mod builder {
+        pub mod builder;
+    }
+    pub mod redis {
+        pub mod pubsub;
+        pub mod redis;
+    }
+    pub mod services_manager {
+        pub mod services_manager;
+    }
+}
 
 use revm::primitives::Address;
 
