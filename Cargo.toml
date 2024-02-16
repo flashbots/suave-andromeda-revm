@@ -44,4 +44,5 @@ revm-primitives = { git = "https://github.com/flashbots/revm.git", branch = "ext
 
 [[bin]]
 name = "services_manager"
+required-features = ["external_services"]
 path = "src/external_services/bin/services_manager.rs"

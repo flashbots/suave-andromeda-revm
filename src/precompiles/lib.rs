@@ -2,7 +2,9 @@ use once_cell::race::OnceBox;
 
 use revm::precompile::Precompiles;
 
+#[cfg(feature = "external_services")]
 use crate::precompiles::services_manager;
+
 use crate::precompiles::sgxattest;
 
 pub fn andromeda_precompiles() -> &'static Precompiles {

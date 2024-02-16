@@ -11,6 +11,7 @@ pub use evm::new_andromeda_revm;
 
 pub mod precompiles {
     pub mod lib;
+    #[cfg(feature = "external_services")]
     pub mod services_manager;
     pub mod sgxattest;
 }
