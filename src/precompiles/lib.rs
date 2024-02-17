@@ -13,10 +13,12 @@ pub fn andromeda_precompiles() -> &'static Precompiles {
         // Mind that the vector must be sorted
         precompiles
             .inner
-            .extend(sm_precompiles().inner.clone().into_iter());
+            .extend(sgx_precompiles().inner.clone().into_iter());
+
         precompiles
             .inner
-            .extend(sgx_precompiles().inner.clone().into_iter());
+            .extend(sm_precompiles().inner.clone().into_iter());
+
         Box::new(precompiles.clone())
     })
 }
