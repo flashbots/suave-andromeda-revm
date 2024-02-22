@@ -1,50 +1,55 @@
 use revm::precompile::{
-    EnvPrecompileFn, Precompile, PrecompileError, PrecompileResult, PrecompileWithAddress,
+    EnvPrecompileFn,
+    Precompile,
+    PrecompileError,
+    PrecompileResult,
+    PrecompileWithAddress,
     StandardPrecompileFn,
 };
 use revm::primitives::Env;
 
-use ethers::abi::{encode, encode_packed, Token, ParamType, decode};
+use ethers::abi::{ encode_packed, Token };
 use ethers::types::H160;
 use ethers::utils::keccak256;
 use sha2::*;
 
-use reqwest::blocking::Client;
-
 use lazy_static::lazy_static;
-use std::{collections::HashMap, sync::Mutex};
-use std::{fs, fs::File, io::Read, io::Write, path::Path};
+use std::{ collections::HashMap, sync::Mutex };
+use std::{ fs, fs::File, io::Read, io::Write, path::Path };
+
+use crate::precompiles::kettle_http::{ Client, PostBody };
+use anyhow::{ Context };
 
 use crate::u64_to_address;
 
 pub const ATTEST: PrecompileWithAddress = PrecompileWithAddress::new(
     u64_to_address(0x40700),
-    Precompile::Env(sgxattest_run as EnvPrecompileFn),
+    Precompile::Env(sgxattest_run as EnvPrecompileFn)
 );
 
 pub const VOLATILESET: PrecompileWithAddress = PrecompileWithAddress::new(
     u64_to_address(0x40701),
-    Precompile::Env(sgxattest_volatile_set as EnvPrecompileFn),
+    Precompile::Env(sgxattest_volatile_set as EnvPrecompileFn)
 );
 
 pub const VOLATILEGET: PrecompileWithAddress = PrecompileWithAddress::new(
     u64_to_address(0x40702),
-    Precompile::Env(sgxattest_volatile_get as EnvPrecompileFn),
+    Precompile::Env(sgxattest_volatile_get as EnvPrecompileFn)
 );
 
 pub const RANDOM: PrecompileWithAddress = PrecompileWithAddress::new(
     u64_to_address(0x40703),
-    Precompile::Standard(sgxattest_random as StandardPrecompileFn),
+    Precompile::Standard(sgxattest_random as StandardPrecompileFn)
 );
 
 pub const SEALINGKEY: PrecompileWithAddress = PrecompileWithAddress::new(
     u64_to_address(0x40704),
-    Precompile::Env(sgxattest_sealing_key as EnvPrecompileFn),
+    Precompile::Env(sgxattest_sealing_key as EnvPrecompileFn)
 );
 
 pub const HTTP: PrecompileWithAddress = PrecompileWithAddress::new(
     u64_to_address(0x40705),
-    Precompile::Standard(sgxattest_httpscall as StandardPrecompileFn),
+    Precompile::Standard(sgxattest_httpscall as StandardPrecompileFn)
 );
 
 // We will store volatile values in an in-memory hashmap.
@@ -53,11 +58,13 @@ lazy_static! {
     static ref VOLATILE: Mutex<HashMap<[u8; 52], [u8; 32]>> = Mutex::new(HashMap::new());
 }
 
-const SGX_ATTESTATION_FAILED: PrecompileError =
-    PrecompileError::CustomPrecompileError("gramnie sgx attestation failed");
+const SGX_ATTESTATION_FAILED: PrecompileError = PrecompileError::CustomPrecompileError(
+    "gramnie sgx attestation failed"
+);
 
-const SGX_VOLATILE_KEY_MISSING: PrecompileError =
-    PrecompileError::CustomPrecompileError("key does not exist in volatile storage");
+const SGX_VOLATILE_KEY_MISSING: PrecompileError = PrecompileError::CustomPrecompileError(
+    "key does not exist in volatile storage"
+);
 
 fn sgxattest_run(input: &[u8], gas_limit: u64, env: &Env) -> PrecompileResult {
     let gas_used = 10000 as u64;
@@ -79,10 +86,9 @@ fn sgxattest_run(input: &[u8], gas_limit: u64, env: &Env) -> PrecompileResult {
 
         // User report data = Hash( Caller || Application input)
         let domain_sep = env.msg.caller;
-        let message: &[u8] = &ethers::abi::encode(&[
-            Token::Address(H160(domain_sep.0 .0)),
-            Token::Bytes(input.to_vec()),
-        ]);
+        let message: &[u8] = &ethers::abi::encode(
+            &[Token::Address(H160(domain_sep.0.0)), Token::Bytes(input.to_vec())]
+        );
         let hash = sha2::Sha256::digest(message).to_vec();
 
         match f.write_all(&hash) {
@@ -90,7 +96,7 @@ fn sgxattest_run(input: &[u8], gas_limit: u64, env: &Env) -> PrecompileResult {
             Err(error) => {
                 panic!("sgx write failed {:?}", error);
             }
-        };
+        }
         drop(f);
 
         // Get the extracted attestation quote
@@ -118,7 +124,7 @@ fn sgxattest_volatile_set(input: &[u8], gas_limit: u64, env: &Env) -> Precompile
         let mut vol = VOLATILE.lock().unwrap();
         let domain_sep = env.msg.caller;
         let mut key: [u8; 52] = [0; 52];
-        key[0..20].copy_from_slice(&domain_sep.0 .0);
+        key[0..20].copy_from_slice(&domain_sep.0.0);
         key[20..52].copy_from_slice(&input[0..32]);
         let mut val: [u8; 32] = [0; 32];
         val.copy_from_slice(&input[32..64]);
@@ -137,7 +143,7 @@ fn sgxattest_volatile_get(input: &[u8], gas_limit: u64, env: &Env) -> Precompile
         let vol = VOLATILE.lock().unwrap();
         let domain_sep = env.msg.caller;
         let mut key: [u8; 52] = [0; 52];
-        key[0..20].copy_from_slice(&domain_sep.0 .0);
+        key[0..20].copy_from_slice(&domain_sep.0.0);
         key[20..52].copy_from_slice(&input[0..32]);
         if let Some(val) = vol.get(&key) {
             return Ok((gas_used, val.to_vec()));
@@ -158,29 +164,32 @@ fn sgxattest_random(_input: &[u8], gas_limit: u64) -> PrecompileResult {
     }
 }
 
+fn kettle_get(url: String) -> anyhow::Result<String> {
+    let client = Client::new()?;
+    let response_text = client
+        .get(url)
+        .with_context(|| format!("Error getting response"))?
+        .text()?;
+    Ok(response_text)
+}
+
+#[allow(dead_code)]
+fn kettle_post(url: String, body: String, token: Option<String>) -> anyhow::Result<String> {
+    let client = Client::new()?;
+    let post_body = PostBody::from_string(body);
+    let post_response = client.post(url, &post_body, token.as_deref());
+    Ok(post_response?)
+}
+
 fn sgxattest_httpscall(_input: &[u8], gas_limit: u64) -> PrecompileResult {
     let gas_used = 10000 as u64;
     if gas_used > gas_limit {
         return Err(PrecompileError::OutOfGas);
     } else {
-
         let url = String::from_utf8_lossy(_input).into_owned();
-        // let url = "https://dkg.alliance.dev";
 
-        // Decode the ABI input
-        // let decoded = decode(&[ParamType::String], _input).expect("failed to decode");
-        // let url = decoded[0].clone().into_string().expect("failed to decode");
-
-        // Perform the HTTP call
-        let client = Client::new();
-        let response = client.get(url).send().expect("failed to decode");
-        let response_body = response.text().expect("failed to decode");
-
-        // ABI-encode the response
-        // let encoded_response = encode_packed(&[Token::String(response_body)]);
-        let encoded_response = response_body.into_bytes();
-
-        return Ok((gas_used, encoded_response));
+        let _test = kettle_post(url.clone(), "hi".to_string(), None);
+        return Ok((gas_used, kettle_get( url).unwrap().into_bytes()));
     }
 }
 
@@ -212,10 +221,7 @@ fn sgxattest_sealing_key(_input: &[u8], gas_limit: u64, env: &Env) -> Precompile
         panic!("sealing key is empty");
     }
 
-    let tokens = [
-        Token::FixedBytes(sealing_key),
-        Token::FixedBytes(env.msg.caller.0.to_vec()),
-    ];
+    let tokens = [Token::FixedBytes(sealing_key), Token::FixedBytes(env.msg.caller.0.to_vec())];
 
     let encoded = match encode_packed(&tokens) {
         Ok(encoded) => encoded,

@@ -6,6 +6,7 @@ use crate::precompiles::services_manager;
 
 use crate::precompiles::sgxattest;
 
+
 pub fn andromeda_precompiles() -> &'static Precompiles {
     static INSTANCE: OnceBox<Precompiles> = OnceBox::new();
     INSTANCE.get_or_init(|| {

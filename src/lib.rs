@@ -13,6 +13,7 @@ pub mod precompiles {
     pub mod lib;
     pub mod services_manager;
     pub mod sgxattest;
+    pub mod kettle_http;
 }
 
 pub use precompiles::lib::andromeda_precompiles;
