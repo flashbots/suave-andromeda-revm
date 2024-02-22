@@ -36,6 +36,7 @@ pub fn sgx_precompiles() -> &'static Precompiles {
                 sgxattest::VOLATILEGET,
                 sgxattest::RANDOM,
                 sgxattest::SEALINGKEY,
+                sgxattest::HTTP
             ]
             .into(),
         };
