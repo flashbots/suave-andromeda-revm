@@ -17,13 +17,17 @@ type HandlerFn =
 #[derive(Parser)]
 struct Cli {
     /// The rpc endpoint to connect to
-    #[arg(short, long, default_value_t = String::from("redis://127.0.0.1:6379/"))]
+    #[arg(long, default_value_t = String::from("redis://127.0.0.1:6379/"))]
     kv_redis_endpoint: String,
-    #[arg(short, long, default_value_t = String::from("redis://127.0.0.1:6379/"))]
+    #[arg(long, default_value_t = String::from("redis://127.0.0.1:6379/"))]
     pubsub_redis_endpoint: String,
-    #[arg(short, long, default_value_t = String::from("0.0.0.0"))]
+
+    #[arg(long, default_values_t = vec![String::from("16813125:'http://127.0.0.1:8555'")])]
+    pub blockchain_rpc_endpoints: Vec<String>,
+
+    #[arg(long, default_value_t = String::from("0.0.0.0"))]
     host: String,
-    #[arg(short, long, default_value_t = String::from("5605"))]
+    #[arg(long, default_value_t = String::from("5605"))]
     port: String,
 }
 

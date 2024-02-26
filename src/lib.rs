@@ -27,6 +27,9 @@ pub mod external_services {
         pub mod pubsub;
         pub mod redis;
     }
+    pub mod blockchain_rpc {
+        pub mod rpc;
+    };
     pub mod services_manager {
         pub mod services_manager;
     }
