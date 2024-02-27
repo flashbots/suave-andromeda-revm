@@ -5,7 +5,8 @@ use revm::precompile::Precompiles;
 use crate::precompiles::services_manager;
 
 use crate::precompiles::sgxattest;
-use crate::precompiles::crypto;
+
+use crate::precompiles::hash;
 
 pub fn andromeda_precompiles() -> &'static Precompiles {
     static INSTANCE: OnceBox<Precompiles> = OnceBox::new();
@@ -20,7 +21,7 @@ pub fn andromeda_precompiles() -> &'static Precompiles {
             .extend(sgx_precompiles().inner.clone().into_iter());
         precompiles
             .inner
-            .extend(crypto_precompiles().inner.clone().into_iter());
+            .extend(hash_precompiles().inner.clone().into_iter());
         Box::new(precompiles.clone())
     })
 }
@@ -52,11 +53,11 @@ pub fn sm_precompiles() -> &'static Precompiles {
     })
 }
 
-pub fn crypto_precompiles() -> &'static Precompiles {
+pub fn hash_precompiles() -> &'static Precompiles {
     static INSTANCE: OnceBox<Precompiles> = OnceBox::new();
     INSTANCE.get_or_init(|| {
         let precompiles = Precompiles {
-            inner: [crypto::SHA512].into(),
+            inner: [hash::SHA512].into(),
         };
         Box::new(precompiles)
     })

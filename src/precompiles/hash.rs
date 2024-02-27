@@ -4,25 +4,24 @@ use revm::precompile::{
     StandardPrecompileFn,
 };
 
-
 use crate::u64_to_address;
 
 pub const SHA512: PrecompileWithAddress = PrecompileWithAddress::new(
     u64_to_address(0x50700),
-    Precompile::Standard(crypto_sha512 as StandardPrecompileFn),
+    Precompile::Standard(hash_sha512 as StandardPrecompileFn),
 );
 
-const HASH512_FAILED: PrecompileError =
-    PrecompileError::CustomPrecompileError("failed hashing empty input!");
+const INVALID_INPUT: PrecompileError =
+    PrecompileError::CustomPrecompileError("Invalid input!");
 
 
-fn crypto_sha512(input: &[u8], gas_limit: u64) -> PrecompileResult {
+fn hash_sha512(input: &[u8], gas_limit: u64) -> PrecompileResult {
     let gas_used = 10000 as u64;
     if gas_used > gas_limit {
         return Err(PrecompileError::OutOfGas);
     } 
     if input.len() == 0 {
-        return Err(HASH512_FAILED);
+        return Err(INVALID_INPUT);
     }
     let output = Sha512::digest(input).to_vec(); 
     Ok((gas_used, output))
