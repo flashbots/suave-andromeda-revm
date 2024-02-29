@@ -9,6 +9,7 @@ use ethers::types::{Bytes, H256};
 
 use crate::external_services::common::CallContext;
 
+use crate::external_services::blockchain_rpc::rpc::{RPCService, RPCServiceError};
 use crate::external_services::builder::builder::{BuilderError, BuilderService};
 use crate::external_services::redis::pubsub::{RedisPubsub, RedisPubsubError};
 use crate::external_services::redis::redis::{RedisService, RedisServiceError};
@@ -35,6 +36,7 @@ pub struct ServicesManager {
 pub struct Config {
     pub kv_redis_endpoint: String,
     pub pubsub_redis_endpoint: String,
+    pub blockchain_rpc_endpoints: Vec<(U256, String)>,
 }
 
 impl ServicesManager {
@@ -96,6 +98,9 @@ impl ServicesManager {
             ),
             #[cfg(not(feature = "redis_external_services"))]
             "redis" | "pubsub" => Err(ServiceError::ServiceUnavailable),
+            "blockchain_rpc" => Ok(Box::new(RPCService::new(
+                self.config.blockchain_rpc_endpoints.clone(),
+            )) as Box<dyn Service>),
             "builder" => Ok(Box::new(BuilderService::new()) as Box<dyn Service>),
             _ => Err(ServiceError::InvalidCall),
         }?;
@@ -145,6 +150,7 @@ impl ServicesManager {
 pub enum ServiceError {
     RedisServiceError(RedisServiceError),
     RedisPubsubError(RedisPubsubError),
+    RPCServiceError(RPCServiceError),
     BuilderError(BuilderError),
 
     InstantiationError(String),
@@ -243,6 +249,44 @@ impl Service for RedisPubsub {
             _ => Err(RedisPubsubError::InvalidCall),
         }
         .map_err(|e| ServiceError::RedisPubsubError(e))
+    }
+}
+
+impl Service for RPCService {
+    fn name(&self) -> String {
+        String::from("blockchain_rpc")
+    }
+
+    fn function_name_from_selector(&self, selector: &[u8; 4]) -> Option<String> {
+        match self.abi.methods.get(selector) {
+            Some((fn_name, _)) => Some(fn_name.clone()),
+            None => None,
+        }
+    }
+
+    fn instantiate(&self, config: Bytes) -> Result<(), ServiceError> {
+        if config.len() == 0 {
+            return Err(ServiceError::InstantiationError(String::from(
+                "missing config",
+            )));
+        }
+
+        println!("instantiated blockchain_rpc with {:?}", self.abi.methods);
+
+        Ok(())
+    }
+
+    fn call(
+        &mut self,
+        fn_name: &str,
+        context: CallContext,
+        inputs: &[u8],
+    ) -> Result<ethers::abi::Bytes, ServiceError> {
+        match fn_name {
+            "eth_call" => self.eth_call(context, inputs),
+            _ => Err(RPCServiceError::InvalidCall),
+        }
+        .map_err(|e| ServiceError::RPCServiceError(e))
     }
 }
 
