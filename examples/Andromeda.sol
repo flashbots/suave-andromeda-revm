@@ -6,6 +6,7 @@ contract Andromeda {
     address public constant VOLATILESET_ADDR = 0x0000000000000000000000000000000000040701;
     address public constant VOLATILEGET_ADDR = 0x0000000000000000000000000000000000040702;
     address public constant RANDOM_ADDR      = 0x0000000000000000000000000000000000040703;
+    address public constant SHA512_ADDR      = 0x0000000000000000000000000000000000050700;
 
     function volatileSet(bytes32 key, bytes32 value) public view {
 	bytes memory cdata = abi.encodePacked([key, value]);
@@ -32,5 +33,12 @@ contract Andromeda {
 	require(success);
 	require(randomBytes.length == 32);
 	return bytes32(randomBytes);
+    }
+
+    function sha512(bytes memory data) public view returns (bytes memory) {
+        (bool success, bytes memory digest) = SHA512_ADDR.staticcall(data);
+        require(success);
+        require(digest.length == 64);
+        return digest;
     }
 }

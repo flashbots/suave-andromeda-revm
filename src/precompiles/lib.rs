@@ -6,6 +6,8 @@ use crate::precompiles::services_manager;
 
 use crate::precompiles::sgxattest;
 
+use crate::precompiles::hash;
+
 pub fn andromeda_precompiles() -> &'static Precompiles {
     static INSTANCE: OnceBox<Precompiles> = OnceBox::new();
     INSTANCE.get_or_init(|| {
@@ -17,6 +19,9 @@ pub fn andromeda_precompiles() -> &'static Precompiles {
         precompiles
             .inner
             .extend(sgx_precompiles().inner.clone().into_iter());
+        precompiles
+            .inner
+            .extend(hash_precompiles().inner.clone().into_iter());
         Box::new(precompiles.clone())
     })
 }
@@ -43,6 +48,16 @@ pub fn sm_precompiles() -> &'static Precompiles {
     INSTANCE.get_or_init(|| {
         let precompiles = Precompiles {
             inner: [services_manager::RUN].into(),
+        };
+        Box::new(precompiles)
+    })
+}
+
+pub fn hash_precompiles() -> &'static Precompiles {
+    static INSTANCE: OnceBox<Precompiles> = OnceBox::new();
+    INSTANCE.get_or_init(|| {
+        let precompiles = Precompiles {
+            inner: [hash::SHA512].into(),
         };
         Box::new(precompiles)
     })

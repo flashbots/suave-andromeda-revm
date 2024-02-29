@@ -79,6 +79,7 @@ fn simulate() -> eyre::Result<()> {
         "function attestSgx(bytes) returns (bytes)",
         "function volatileSet(bytes32,bytes32)",
         "function volatileGet(bytes32) returns (bytes32)",
+        "function sha512(bytes) returns (bytes)",
     ])?);
 
     //////////////////////////
@@ -155,5 +156,25 @@ fn simulate() -> eyre::Result<()> {
         dbg!(std::str::from_utf8(val).unwrap());
     }
 
+    //////////////////////////
+    // Suave.sha512
+    //////////////////////////
+    {
+        let calldata = abi.encode("sha512", (Token::Bytes("test".as_bytes().to_vec()),))?;
+        evm.context.env.tx = TxEnv {
+            caller: ADDR_A,
+            transact_to: revm::primitives::TransactTo::Call(ADDR_B),
+            data: revm::primitives::Bytes::from(calldata.0),
+            ..Default::default()
+        };
+        let result = evm.transact()?;
+        let decoded = ethabi::decode(&[ethabi::ParamType::Bytes], result.result.output().unwrap())?;
+        let hash = match &decoded[0] {
+            Token::Bytes(b) => b,
+            _ => todo!(),
+        };
+        let hex: String = hash.iter().map(|byte| format!("{:02x}", byte)).collect();
+        dbg!(hex);
+    }
     Ok(())
 }
