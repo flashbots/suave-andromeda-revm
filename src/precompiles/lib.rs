@@ -1,12 +1,26 @@
 use once_cell::race::OnceBox;
+use std::sync::Mutex;
 
 use revm::precompile::Precompiles;
 
+use crate::precompiles::hash;
+use crate::precompiles::http;
 use crate::precompiles::services_manager;
-
 use crate::precompiles::sgxattest;
 
-use crate::precompiles::hash;
+pub struct PrecompileConfig {
+    pub http_whitelist: Vec<String>,
+}
+
+pub static PRECOMPILE_CONFIG: Mutex<Option<PrecompileConfig>> = Mutex::new(None);
+
+// Call this once before any precompiles!
+// Workaround the fact that closures cannot be easily used with revm precompiles
+pub fn set_precompile_config(cfg: PrecompileConfig) {
+    let mut c_cfg = PRECOMPILE_CONFIG.lock().unwrap();
+    assert!(c_cfg.is_none());
+    *c_cfg = Some(cfg);
+}
 
 pub fn andromeda_precompiles() -> &'static Precompiles {
     static INSTANCE: OnceBox<Precompiles> = OnceBox::new();
@@ -22,6 +36,9 @@ pub fn andromeda_precompiles() -> &'static Precompiles {
         precompiles
             .inner
             .extend(hash_precompiles().inner.clone().into_iter());
+        precompiles
+            .inner
+            .extend(http_precompiles().inner.clone().into_iter());
         Box::new(precompiles.clone())
     })
 }
@@ -36,9 +53,18 @@ pub fn sgx_precompiles() -> &'static Precompiles {
                 sgxattest::VOLATILEGET,
                 sgxattest::RANDOM,
                 sgxattest::SEALINGKEY,
-                sgxattest::HTTP
             ]
             .into(),
+        };
+        Box::new(precompiles)
+    })
+}
+
+pub fn http_precompiles() -> &'static Precompiles {
+    static INSTANCE: OnceBox<Precompiles> = OnceBox::new();
+    INSTANCE.get_or_init(|| {
+        let precompiles = Precompiles {
+            inner: [http::HTTP_CALL].into(),
         };
         Box::new(precompiles)
     })

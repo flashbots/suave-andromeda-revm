@@ -4,12 +4,10 @@ use revm::precompile::{
 };
 use revm::primitives::Env;
 
-use ethers::abi::{encode, encode_packed, Token, ParamType, decode};
+use ethers::abi::{encode_packed, Token};
 use ethers::types::H160;
 use ethers::utils::keccak256;
 use sha2::*;
-
-use reqwest::blocking::Client;
 
 use lazy_static::lazy_static;
 use std::{collections::HashMap, sync::Mutex};
@@ -40,11 +38,6 @@ pub const RANDOM: PrecompileWithAddress = PrecompileWithAddress::new(
 pub const SEALINGKEY: PrecompileWithAddress = PrecompileWithAddress::new(
     u64_to_address(0x40704),
     Precompile::Env(sgxattest_sealing_key as EnvPrecompileFn),
-);
-
-pub const HTTP: PrecompileWithAddress = PrecompileWithAddress::new(
-    u64_to_address(0x40705),
-    Precompile::Standard(sgxattest_httpscall as StandardPrecompileFn),
 );
 
 // We will store volatile values in an in-memory hashmap.
@@ -155,32 +148,6 @@ fn sgxattest_random(_input: &[u8], gas_limit: u64) -> PrecompileResult {
         let mut buffer = [0; 32];
         file.read(&mut buffer[..]).unwrap();
         return Ok((gas_used, buffer.to_vec()));
-    }
-}
-
-fn sgxattest_httpscall(_input: &[u8], gas_limit: u64) -> PrecompileResult {
-    let gas_used = 10000 as u64;
-    if gas_used > gas_limit {
-        return Err(PrecompileError::OutOfGas);
-    } else {
-
-        let url = String::from_utf8_lossy(_input).into_owned();
-        // let url = "https://dkg.alliance.dev";
-
-        // Decode the ABI input
-        // let decoded = decode(&[ParamType::String], _input).expect("failed to decode");
-        // let url = decoded[0].clone().into_string().expect("failed to decode");
-
-        // Perform the HTTP call
-        let client = Client::new();
-        let response = client.get(url).send().expect("failed to decode");
-        let response_body = response.text().expect("failed to decode");
-
-        // ABI-encode the response
-        // let encoded_response = encode_packed(&[Token::String(response_body)]);
-        let encoded_response = response_body.into_bytes();
-
-        return Ok((gas_used, encoded_response));
     }
 }
 

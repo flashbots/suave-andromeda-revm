@@ -3,17 +3,18 @@ pub use remote_db::{RemoteDB, StateProvider};
 pub mod utils;
 pub use utils::ethers_block_to_helios;
 pub mod stateful;
-pub use stateful::StatefulExecutor;
+pub use stateful::{StatefulExecutor, StatefulExecutorConfig};
 pub mod consensus;
 
 pub mod evm;
 pub use evm::new_andromeda_revm;
 
 pub mod precompiles {
+    pub mod hash;
+    pub mod http;
     pub mod lib;
     pub mod services_manager;
     pub mod sgxattest;
-    pub mod hash;
 }
 
 pub use precompiles::lib::andromeda_precompiles;

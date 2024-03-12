@@ -1,21 +1,27 @@
 use clap::Parser;
 use std::io;
 
-use suave_andromeda_revm::StatefulExecutor;
+use suave_andromeda_revm::{StatefulExecutor, StatefulExecutorConfig};
 
 #[derive(Parser)]
 struct Cli {
     /// The rpc endpoint to connect to
-    #[arg(short, long, default_value_t = String::from("http://127.0.0.1:8545"))]
+    #[arg(long, default_value_t = String::from("http://127.0.0.1:8545"))]
     rpc: String,
-    #[arg(short, long, default_value_t = false)]
+    #[arg(long, default_values_t = [String::from("*")], help = "Whitelist for http precompiles. Can be URL, '*', or contract address (caller)")]
+    http_whitelist: Vec<String>,
+    #[arg(long, default_value_t = false)]
     trace: bool,
 }
 
 #[tokio::main]
 async fn main() {
     let cli_args = Cli::parse();
-    let mut service = StatefulExecutor::new_with_rpc(cli_args.rpc.clone());
+    let service_cfg = StatefulExecutorConfig {
+        rpc: cli_args.rpc.clone(),
+        http_precompile_whitelist: cli_args.http_whitelist.clone(),
+    };
+    let mut service = StatefulExecutor::new_with_cfg(service_cfg);
 
     // TODO: probably doesnt work due to async
     loop {
