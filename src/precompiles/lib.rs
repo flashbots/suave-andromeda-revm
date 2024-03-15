@@ -43,6 +43,16 @@ pub fn andromeda_precompiles() -> &'static Precompiles {
     })
 }
 
+pub fn sm_precompiles() -> &'static Precompiles {
+    static INSTANCE: OnceBox<Precompiles> = OnceBox::new();
+    INSTANCE.get_or_init(|| {
+        let precompiles = Precompiles {
+            inner: [services_manager::RUN].into(),
+        };
+        Box::new(precompiles)
+    })
+}
+
 pub fn sgx_precompiles() -> &'static Precompiles {
     static INSTANCE: OnceBox<Precompiles> = OnceBox::new();
     INSTANCE.get_or_init(|| {
@@ -60,31 +70,21 @@ pub fn sgx_precompiles() -> &'static Precompiles {
     })
 }
 
-pub fn http_precompiles() -> &'static Precompiles {
-    static INSTANCE: OnceBox<Precompiles> = OnceBox::new();
-    INSTANCE.get_or_init(|| {
-        let precompiles = Precompiles {
-            inner: [http::HTTP_CALL].into(),
-        };
-        Box::new(precompiles)
-    })
-}
-
-pub fn sm_precompiles() -> &'static Precompiles {
-    static INSTANCE: OnceBox<Precompiles> = OnceBox::new();
-    INSTANCE.get_or_init(|| {
-        let precompiles = Precompiles {
-            inner: [services_manager::RUN].into(),
-        };
-        Box::new(precompiles)
-    })
-}
-
 pub fn hash_precompiles() -> &'static Precompiles {
     static INSTANCE: OnceBox<Precompiles> = OnceBox::new();
     INSTANCE.get_or_init(|| {
         let precompiles = Precompiles {
             inner: [hash::SHA512].into(),
+        };
+        Box::new(precompiles)
+    })
+}
+
+pub fn http_precompiles() -> &'static Precompiles {
+    static INSTANCE: OnceBox<Precompiles> = OnceBox::new();
+    INSTANCE.get_or_init(|| {
+        let precompiles = Precompiles {
+            inner: [http::HTTP_CALL].into(),
         };
         Box::new(precompiles)
     })

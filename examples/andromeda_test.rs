@@ -3,7 +3,7 @@ use revm::{
     InMemoryDB, Transact,
 };
 
-use ethers::abi::{ethabi, parse_abi, Token};
+use ethers::abi::{ethabi, parse_abi, JsonAbi, Token};
 use ethers::contract::{BaseContract, Lazy};
 use std::include_str;
 
@@ -15,63 +15,25 @@ fn main() -> eyre::Result<()> {
     Ok(())
 }
 
-pub static ANDROMEDA_CODE: Lazy<Bytes> = Lazy::new(|| {
-    include_str!("examples_Andromeda_sol_Andromeda.bin")
-        .parse()
-        .unwrap()
+pub static ANDROMEDA_CODE: Lazy<JsonAbi> = Lazy::new(|| {
+    serde_json::from_str(include_str!("../src/out/Andromeda.sol/Andromeda.json")).unwrap()
 });
 
 pub static ADDR_A: Address = address!("4838b106fce9647bdf1e7877bf73ce8b0bad5f97");
 pub static ADDR_B: Address = address!("F2d01Ee818509a9540d8324a5bA52329af27D19E");
 
-fn get_code() -> eyre::Result<Bytes> {
-    // This is gross, but I'm trying to remove the "constructor" from the bytecode
-    // generated from solc
-    let mut db = InMemoryDB::default();
-    let info = AccountInfo {
-        code: Some(Bytecode::new_raw((*ANDROMEDA_CODE.0).into())),
-        ..Default::default()
-    };
-    db.insert_account_info(ADDR_B, info);
-
-    let mut env = Env::default();
-    env.tx = TxEnv {
-        caller: ADDR_A,
-        transact_to: revm::primitives::TransactTo::Call(ADDR_B),
-        data: revm::primitives::Bytes::from(ANDROMEDA_CODE.0.clone()),
-        ..Default::default()
-    };
-
-    let mut evm = new_andromeda_revm(&mut db, &mut env, None);
-
-    let result = evm.transact()?;
-    //dbg!(&result);
-    match result.result.output() {
-        Some(o) => Ok(o.clone()),
-        _ => {
-            todo!()
-        }
-    }
-}
-
 fn simulate() -> eyre::Result<()> {
     let mut db = InMemoryDB::default();
 
-    let code = get_code()?;
     let info = AccountInfo {
-        code: Some(Bytecode::new_raw(code)),
+        code: Some(Bytecode::new_raw(Bytes::from_iter(
+            ANDROMEDA_CODE.deployed_bytecode().unwrap().into_iter(),
+        ))),
         ..Default::default()
     };
     db.insert_account_info(ADDR_B, info);
 
     let mut env = Env::default();
-    env.tx = TxEnv {
-        caller: ADDR_A,
-        transact_to: revm::primitives::TransactTo::Call(ADDR_B),
-        data: revm::primitives::Bytes::from(ANDROMEDA_CODE.0.clone()),
-        ..Default::default()
-    };
-
     let mut evm = new_andromeda_revm(&mut db, &mut env, None);
 
     let abi = BaseContract::from(parse_abi(&[
@@ -80,6 +42,8 @@ fn simulate() -> eyre::Result<()> {
         "function volatileSet(bytes32,bytes32)",
         "function volatileGet(bytes32) returns (bytes32)",
         "function sha512(bytes) returns (bytes)",
+        "struct HttpRequest { string url; string method; string[] headers; bytes body; bool withFlashbotsSignature; }",
+        "function doHTTPRequest(HttpRequest memory request) returns (bytes memory)",
     ])?);
 
     //////////////////////////
@@ -176,5 +140,54 @@ fn simulate() -> eyre::Result<()> {
         let hex: String = hash.iter().map(|byte| format!("{:02x}", byte)).collect();
         dbg!(hex);
     }
+
+    //////////////////////////
+    // Suave.doHttpRequest
+    //////////////////////////
+    {
+        use httptest::{matchers::*, responders::*, Expectation, Server};
+        use suave_andromeda_revm::precompiles::lib::{set_precompile_config, PrecompileConfig};
+
+        let mut server = Server::run();
+        set_precompile_config(PrecompileConfig {
+            http_whitelist: vec![server.url("").to_string()],
+        });
+
+        server.expect(
+            Expectation::matching(httptest::matchers::all_of(vec![
+                Box::new(request::method_path("POST", "/foo")),
+                Box::new(request::body("xoxo")),
+                Box::new(request::headers(contains(("x-xoxo", "XOXO")))),
+            ]))
+            .respond_with(status_code(200).body("test test test")),
+        );
+
+        let calldata = abi.encode(
+            "doHTTPRequest",
+            (Token::Tuple(vec![
+                Token::String(server.url("/foo").to_string()),
+                Token::String(String::from("post")),
+                Token::Array(vec![Token::String(String::from("x-xoxo: XOXO"))]),
+                Token::Bytes(String::from("xoxo").into_bytes()),
+                Token::Bool(false),
+            ]),),
+        )?;
+
+        evm.context.env.tx = TxEnv {
+            caller: ADDR_A,
+            transact_to: revm::primitives::TransactTo::Call(ADDR_B),
+            data: revm::primitives::Bytes::from(calldata.0),
+            ..Default::default()
+        };
+        let result = evm.transact()?;
+        let decoded = ethabi::decode(&[ethabi::ParamType::Bytes], result.result.output().unwrap())?;
+        let outp = decoded[0]
+            .clone()
+            .into_bytes()
+            .expect("invalid output encoding");
+        assert_eq!(&outp, b"test test test");
+        server.verify_and_clear();
+    }
+
     Ok(())
 }
