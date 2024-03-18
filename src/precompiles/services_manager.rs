@@ -60,10 +60,6 @@ fn run(input: &[u8], gas_limit: u64, env: &Env) -> PrecompileResult {
             "callService" => call_service(input, gas_limit, env),
             _ => Err(INCORRECT_INPUTS),
         }
-        .map_err(|e| {
-            println!("{:?}", e);
-            e
-        })
     } else {
         Err(INCORRECT_INPUTS)
     }
@@ -97,8 +93,7 @@ fn get_service(input: &[u8], gas_limit: u64, env: &Env) -> PrecompileResult {
 
     // TODO: configure elsewhere
     let instantiate_resp_raw = send_to_requests_manager(input, "http://127.0.0.1:5605/");
-    if let Err(e) = instantiate_resp_raw {
-        println!("{:?}", e);
+    if let Err(_e) = instantiate_resp_raw {
         return Err(INSTANTIATE_FAILED);
     };
 

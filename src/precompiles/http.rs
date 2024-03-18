@@ -57,10 +57,7 @@ fn httpcall(input: &[u8], gas_limit: u64) -> PrecompileResult {
         ])],
         input,
     )
-    .map_err(|_e| {
-        println!("{:?}", _e);
-        HTTP_INVALID_INPUT
-    })?;
+    .map_err(|_e| HTTP_INVALID_INPUT)?;
 
     let input_tuple_raw = decoded[0]
         .to_owned()
@@ -121,26 +118,21 @@ fn httpcall(input: &[u8], gas_limit: u64) -> PrecompileResult {
     // Perform the HTTP call
     let client = ReqwestClient::new();
     let response = (|| match method.as_str() {
-        "get" => client.get(url).headers(headers).send().map_err(|_e| {
-            println!("{:?}", _e);
-            HTTP_CANNOT_REQUEST
-        }),
+        "get" => client
+            .get(url)
+            .headers(headers)
+            .send()
+            .map_err(|_e| HTTP_CANNOT_REQUEST),
         "post" => client
             .post(url)
             .headers(headers)
             .body(req_data)
             .send()
-            .map_err(|_e| {
-                println!("{:?}", _e);
-                HTTP_CANNOT_REQUEST
-            }),
+            .map_err(|_e| HTTP_CANNOT_REQUEST),
         _ => Err(HTTP_INVALID_METHOD),
     })()?;
 
-    let response_body = response.bytes().map_err(|_e| {
-        println!("{:?}", _e);
-        HTTP_CANNOT_DECODE_RESP
-    })?;
+    let response_body = response.bytes().map_err(|_e| HTTP_CANNOT_DECODE_RESP)?;
 
     // ABI-encode the response
     let encoded_response = encode(&[Token::Bytes(response_body.to_vec())]);
