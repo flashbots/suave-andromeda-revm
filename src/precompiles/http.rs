@@ -5,20 +5,15 @@ use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 
 use ethers::abi::{decode, encode, ParamType, Token};
 use revm::precompile::{
-    EnvPrecompileFn, Precompile, PrecompileError, PrecompileResult, PrecompileWithAddress,
+    Precompile, PrecompileError, PrecompileResult, PrecompileWithAddress, StandardPrecompileFn,
 };
-use revm::primitives::Env;
 
-use crate::precompiles::lib::PRECOMPILE_CONFIG;
 use crate::u64_to_address;
 
 pub const HTTP_CALL: PrecompileWithAddress = PrecompileWithAddress::new(
     u64_to_address(0x43200002),
-    Precompile::Env(httpcall as EnvPrecompileFn),
+    Precompile::Standard(httpcall as StandardPrecompileFn),
 );
-
-const DESTINATION_NOT_WHITELISTED: PrecompileError =
-    PrecompileError::CustomPrecompileError("http call destination not allowed by whitelist");
 
 const HTTP_CANNOT_REQUEST: PrecompileError =
     PrecompileError::CustomPrecompileError("unable to perform http request");
@@ -38,7 +33,7 @@ const HTTP_INVALID_HEADER: PrecompileError =
 const HTTP_INVALID_DATA: PrecompileError =
     PrecompileError::CustomPrecompileError("unable to abi-decode request data");
 
-fn httpcall(input: &[u8], gas_limit: u64, env: &Env) -> PrecompileResult {
+fn httpcall(input: &[u8], gas_limit: u64) -> PrecompileResult {
     let gas_used = 10000 as u64;
     if gas_used > gas_limit {
         return Err(PrecompileError::OutOfGas);
@@ -85,33 +80,6 @@ fn httpcall(input: &[u8], gas_limit: u64, env: &Env) -> PrecompileResult {
         .to_owned()
         .into_string()
         .ok_or(HTTP_INVALID_URL)?;
-
-    let is_allowed = (|| {
-        for allowed in &PRECOMPILE_CONFIG
-            .lock()
-            .unwrap()
-            .as_ref()
-            .unwrap()
-            .http_whitelist
-        {
-            if allowed == "*" {
-                return true;
-            }
-
-            if url.starts_with(allowed) {
-                return true;
-            }
-
-            if env.msg.caller.to_string() == *allowed {
-                return true;
-            }
-        }
-        false
-    })();
-
-    if !is_allowed {
-        return Err(DESTINATION_NOT_WHITELISTED);
-    }
 
     let method = input_tuple[1]
         .to_owned()
@@ -186,16 +154,9 @@ mod tests {
 
     use super::*;
 
-    use crate::precompiles::lib::{set_precompile_config, PrecompileConfig};
-
     #[test]
     fn http_call() -> Result<(), String> {
         let mut server = Server::run();
-        set_precompile_config(PrecompileConfig {
-            http_whitelist: vec![server.url("").to_string()],
-        });
-
-        let env = Env { ..Env::default() };
 
         {
             // Green path - post with a body and headers
@@ -215,7 +176,7 @@ mod tests {
                 Token::Bytes(String::from("xoxo").into_bytes()),
                 Token::Bool(false),
             ])]);
-            let res = httpcall(&input, 10000, &env).expect("http call did not succeed");
+            let res = httpcall(&input, 10000).expect("http call did not succeed");
             assert_eq!(
                 res.1,
                 encode(&[Token::Bytes(String::from("test test test").into_bytes())])
@@ -241,7 +202,7 @@ mod tests {
                 Token::Bytes(vec![]),
                 Token::Bool(false),
             ])]);
-            let res = httpcall(&input, 10000, &env).expect("http call did not succeed");
+            let res = httpcall(&input, 10000).expect("http call did not succeed");
             assert_eq!(
                 res.1,
                 encode(&[Token::Bytes(String::from("test test test").into_bytes())])
@@ -259,7 +220,7 @@ mod tests {
                 Token::Bytes(String::from("xoxo").into_bytes()),
                 Token::Bool(false),
             ])]);
-            assert_eq!(httpcall(&input, 10000, &env), Err(HTTP_INVALID_DATA));
+            assert_eq!(httpcall(&input, 10000), Err(HTTP_INVALID_DATA));
         }
 
         {
@@ -272,7 +233,7 @@ mod tests {
                 Token::Bool(true),
             ])]);
             assert_eq!(
-                httpcall(&input, 10000, &env),
+                httpcall(&input, 10000),
                 Err(HTTP_FLASHBOTS_SIG_NOT_SUPPORTED)
             );
         }

@@ -34,8 +34,6 @@ use helios::types::BlockTag;
 
 use crate::new_andromeda_revm;
 
-use crate::precompiles::lib::{set_precompile_config, PrecompileConfig};
-
 pub struct StatefulExecutor {
     pub rpc_state_provider: ExecutionClient<HttpRpc>,
     pub http_provider: Provider<Http>,
@@ -54,7 +52,6 @@ pub enum StatefulExecutorError {
 
 pub struct StatefulExecutorConfig {
     pub rpc: String,
-    pub http_precompile_whitelist: Vec<String>,
 }
 
 impl StatefulExecutor {
@@ -68,10 +65,6 @@ impl StatefulExecutor {
 
         let http_provider = Provider::<Http>::try_from(cfg.rpc.clone())
             .expect("could not instantiate HTTP Provider");
-
-        set_precompile_config(PrecompileConfig {
-            http_whitelist: cfg.http_precompile_whitelist,
-        });
 
         StatefulExecutor {
             rpc_state_provider,

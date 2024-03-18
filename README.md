@@ -15,7 +15,7 @@ The Andromeda [precompiles](src/precompiles/) rely on features from Gramine, pro
 - `Suave.sealingKey` uses [Gramine's pseudo-directory `/dev/attestation/keys`](https://gramine.readthedocs.io/en/stable/devel/features.html#attestation) feature.
 
 As additional utility precompiles we include:
-- `Suave.doHTTPRequest`, which uses `/etc/ssl/ca-certificates.crt` for HTTPS certificates (the file must be included in the Gramine manifest!). This specific precompile is in addition controlled by a whitelist (see `--help` for format).
+- `Suave.doHTTPRequest`, which uses `/etc/ssl/ca-certificates.crt` for HTTPS certificates (the file must be included in the Gramine manifest!).
 
 The tests include a thin wrapper for the precompiles [examples/Andromeda.sol]. This is a small interface, but it should be sufficient to run the [Key Manager demo](https://github.com/flashbots/andromeda-sirrah-contracts/)
 

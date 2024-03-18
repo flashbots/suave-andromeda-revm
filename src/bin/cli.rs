@@ -24,15 +24,11 @@ use revm::{
 
 use ethers::utils as ethers_utils;
 
-use suave_andromeda_revm::precompiles::lib::{set_precompile_config, PrecompileConfig};
-
 #[derive(Parser)]
 struct Cli {
     /// The rpc endpoint to connect to
     #[arg(long, default_value_t = String::from("http://127.0.0.1:8545"))]
     rpc: String,
-    #[arg(long, default_values_t = [String::from("*")], help = "Whitelist for http precompiles. Can be URL, '*', or contract address (caller)")]
-    http_whitelist: Vec<String>,
     /// The transaction to execute (rlp? encoded)
     tx_bytes: String,
 }
@@ -43,10 +39,6 @@ async fn main() {
 
     let tx: TxEnv =
         serde_json::from_str(args.tx_bytes.as_str()).expect("could not parse transaction");
-
-    set_precompile_config(PrecompileConfig {
-        http_whitelist: args.http_whitelist,
-    });
 
     /* Fetch the latest block */
     /* Alternatively the block could be passed in via command line */

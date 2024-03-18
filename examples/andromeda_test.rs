@@ -146,12 +146,8 @@ fn simulate() -> eyre::Result<()> {
     //////////////////////////
     {
         use httptest::{matchers::*, responders::*, Expectation, Server};
-        use suave_andromeda_revm::precompiles::lib::{set_precompile_config, PrecompileConfig};
 
         let mut server = Server::run();
-        set_precompile_config(PrecompileConfig {
-            http_whitelist: vec![server.url("").to_string()],
-        });
 
         server.expect(
             Expectation::matching(httptest::matchers::all_of(vec![
