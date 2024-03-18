@@ -14,6 +14,9 @@ The Andromeda [precompiles](src/precompiles/) rely on features from Gramine, pro
 - `Suave.attestSgx` uses [Gramine's remote attestation `/dev/attestation/quote`](https://gramine.readthedocs.io/en/stable/devel/features.html#attestation).
 - `Suave.sealingKey` uses [Gramine's pseudo-directory `/dev/attestation/keys`](https://gramine.readthedocs.io/en/stable/devel/features.html#attestation) feature.
 
+As additional utility precompiles we include:
+- `Suave.doHTTPRequest`, which uses `/etc/ssl/ca-certificates.crt` for HTTPS certificates (the file must be included in the Gramine manifest!).
+
 The tests include a thin wrapper for the precompiles [examples/Andromeda.sol]. This is a small interface, but it should be sufficient to run the [Key Manager demo](https://github.com/flashbots/andromeda-sirrah-contracts/)
 
 ## SUAVE chain state
@@ -34,8 +37,7 @@ There are two methods that the `StatefulExecutor` implements:
 
 ## Building
 ```shell
-solcjs --bin -o examples examples/Andromeda.sol
-cargo build
+make build
 ```
 
 **_Note:_** `clang` is required for building revm with `c-kzg` or `secp256k1` feature flags as they depend on `C` libraries. If you don't have it installed, you can install it with `apt install clang`.
@@ -50,7 +52,7 @@ echo "dummnyquote" > /dev/attestation/quote
 ```
 
 ```shell
-cargo run -p suave-andromeda-revm --example andromeda_test
+make examples
 ```
 
 ## License

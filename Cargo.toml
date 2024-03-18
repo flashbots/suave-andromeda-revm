@@ -36,6 +36,7 @@ reqwest = { version = "0.11.22", features = ["blocking"] }
 tiny_http = "0.12.0"
 regex = "1.10.3"
 redis = { version = "0.24.0", features = ["tokio-comp", "connection-manager"] }
+httptest = "0.15.5"
 
 [patch."https://github.com/bluealloy/revm"]
 revm = { git = "https://github.com/flashbots/revm.git", branch = "extensible-precompiles" }

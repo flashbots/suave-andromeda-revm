@@ -27,7 +27,7 @@ use ethers::utils as ethers_utils;
 #[derive(Parser)]
 struct Cli {
     /// The rpc endpoint to connect to
-    #[arg(short, long, default_value_t = String::from("http://127.0.0.1:8545"))]
+    #[arg(long, default_value_t = String::from("http://127.0.0.1:8545"))]
     rpc: String,
     /// The transaction to execute (rlp? encoded)
     tx_bytes: String,

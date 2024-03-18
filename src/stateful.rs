@@ -32,14 +32,14 @@ use crate::utils::{ethers_block_to_helios, BlockError};
 use eyre::Report;
 use helios::types::BlockTag;
 
+use crate::new_andromeda_revm;
+
 pub struct StatefulExecutor {
     pub rpc_state_provider: ExecutionClient<HttpRpc>,
     pub http_provider: Provider<Http>,
     pub consensus: Consensus,
     finalized_block_tx: watch::Sender<Option<Block>>,
 }
-
-use crate::new_andromeda_revm;
 
 #[derive(Debug)]
 pub enum StatefulExecutorError {
@@ -50,17 +50,21 @@ pub enum StatefulExecutorError {
     ConsensusError(consensus::errors::ConsensusError),
 }
 
+pub struct StatefulExecutorConfig {
+    pub rpc: String,
+}
+
 impl StatefulExecutor {
-    pub fn new_with_rpc(rpc: String) -> Self {
+    pub fn new_with_cfg(cfg: StatefulExecutorConfig) -> Self {
         let (_block_tx, block_rx) = mpsc::channel(1);
         let (finalized_block_tx, finalized_block_rx) = watch::channel(None);
         let consensus = Consensus::new().unwrap();
         let rpc_state_provider: ExecutionClient<HttpRpc> =
-            ExecutionClient::new(&rpc, State::new(block_rx, finalized_block_rx, 1))
+            ExecutionClient::new(&cfg.rpc, State::new(block_rx, finalized_block_rx, 1))
                 .expect("could not instantiate execution client");
 
-        let http_provider =
-            Provider::<Http>::try_from(rpc.clone()).expect("could not instantiate HTTP Provider");
+        let http_provider = Provider::<Http>::try_from(cfg.rpc.clone())
+            .expect("could not instantiate HTTP Provider");
 
         StatefulExecutor {
             rpc_state_provider,
