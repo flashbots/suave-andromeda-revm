@@ -132,19 +132,14 @@ fn sgxattest_volatile_get(input: &[u8], gas_limit: u64, env: &Env) -> Precompile
         let mut key: [u8; 52] = [0; 52];
         key[0..20].copy_from_slice(&domain_sep.0 .0);
         key[20..52].copy_from_slice(&input[0..32]);
-        let mut success = true;
-        let mut value = [0; 32];
+        let mut value = ethers::abi::encode(&[Token::Bytes(vec![])]);
         if let Some(val) = vol.get(&key) {
-           value = val.clone();
+            value = ethers::abi::encode(&[Token::Bytes(val.to_vec())]);
+            return Ok((gas_used, value.to_vec()));
         } else {
-            success = false;
+            // return empty value bytes if key does not exist
+            return Ok((gas_used, value.to_vec()));
         }
-        let result = &ethers::abi::encode(&[
-            Token::Bool(success),
-            Token::FixedBytes(value.to_vec()),
-        ]);
-         
-        return Ok((gas_used, result.to_vec()));    
     }
 }
 

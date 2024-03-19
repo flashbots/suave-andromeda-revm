@@ -40,7 +40,7 @@ fn simulate() -> eyre::Result<()> {
         "function localRandom() returns (bytes32)",
         "function attestSgx(bytes) returns (bytes)",
         "function volatileSet(bytes32,bytes32)",
-        "function volatileGet(bytes32) returns (bool, bytes32)",
+        "function volatileGet(bytes32) returns (bytes)",
         "function sha512(bytes) returns (bytes)",
         "struct HttpRequest { string url; string method; string[] headers; bytes body; bool withFlashbotsSignature; }",
         "function doHTTPRequest(HttpRequest memory request) returns (bytes memory)",
@@ -84,7 +84,7 @@ fn simulate() -> eyre::Result<()> {
     //////////////////////////
     // Suave.volatileSet/Get
     //////////////////////////
-    let mykey = "deadbeefdeadbeefdeadbeefdeadbeef".as_bytes().to_vec();
+    let mykey: Vec<u8> = "deadbeefdeadbeefdeadbeefdeadbeef".as_bytes().to_vec();
     let myval = "cafebabecafebabecafebabecafebabe".as_bytes().to_vec();
     {
         let calldata = abi.encode(
@@ -100,7 +100,7 @@ fn simulate() -> eyre::Result<()> {
         let _result = evm.transact()?;
         //dbg!(result);
     }
-        // Existing key test
+    // Existing key test
     {
         let calldata = abi.encode("volatileGet", (Token::FixedBytes(mykey),))?;
         evm.context.env.tx = TxEnv {
@@ -110,27 +110,19 @@ fn simulate() -> eyre::Result<()> {
             ..Default::default()
         };
         let result = evm.transact()?;
-        let decoded = ethabi::decode(
-            &[ethabi::ParamType::Bool, ethabi::ParamType::FixedBytes(32)],
-            result.result.output().unwrap(),
-        )?;
-        let status = match &decoded[0] {
-            Token::Bool(b) => b,
+        let decoded = ethabi::decode(&[ethabi::ParamType::Bytes], result.result.output().unwrap())?;
+        let val = match &decoded[0] {
+            Token::Bytes(b) => b,
             _ => todo!(),
         };
-        assert_eq!(status, &true);
-        let val = match &decoded[1] {
-            Token::FixedBytes(b) => b,
-            _ => todo!(),
-        };
-        assert_eq!(val.to_vec(), myval);
-
+        assert_eq!(val.to_vec(), myval.to_vec());
         dbg!(std::str::from_utf8(val).unwrap());
+
     }
-        // Non-existing key test
-    {
-        let nonExistingKey = "beefdeadbeefdeadbeefdeadbeefdead".as_bytes().to_vec();
-        let calldata = abi.encode("volatileGet", (Token::FixedBytes(nonExistingKey),))?;
+     // Non Existing key test
+     {
+        let notmykey: Vec<u8> = "deadbeefdeadbeefdeadbeefdeadbeff".as_bytes().to_vec();
+        let calldata = abi.encode("volatileGet", (Token::FixedBytes(notmykey),))?;
         evm.context.env.tx = TxEnv {
             caller: ADDR_A,
             transact_to: revm::primitives::TransactTo::Call(ADDR_B),
@@ -138,23 +130,16 @@ fn simulate() -> eyre::Result<()> {
             ..Default::default()
         };
         let result = evm.transact()?;
-        let decoded = ethabi::decode(
-            &[ethabi::ParamType::Bool, ethabi::ParamType::FixedBytes(32)],
-            result.result.output().unwrap(),
-        )?;
-        let status = match &decoded[0] {
-            Token::Bool(b) => b,
+        let decoded = ethabi::decode(&[ethabi::ParamType::Bytes], result.result.output().unwrap())?;
+        let val = match &decoded[0] {
+            Token::Bytes(b) => b,
             _ => todo!(),
         };
-        assert_eq!(status, &false);
-        let val = match &decoded[1] {
-            Token::FixedBytes(b) => b,
-            _ => todo!(),
-        };
-        assert_eq!(val.to_vec(), vec![0u8; 32]);
-        //dbg!(std::str::from_utf8(val).unwrap());
+        // empty vector 
+        let emptyvec: Vec<u8> = Vec::new();
+        assert_eq!(val.to_vec(), emptyvec.to_vec());
+        dbg!(std::str::from_utf8(val).unwrap());
     }
-
 
 
     //////////////////////////
