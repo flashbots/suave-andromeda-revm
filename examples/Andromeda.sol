@@ -16,11 +16,11 @@ contract Andromeda {
 	require(success);
     }
 
-    function volatileGet(bytes32 key) public view returns (bytes32) {
+    function volatileGet(bytes32 key) public view returns (bool status, bytes32 val) {
         (bool success, bytes memory value) = VOLATILEGET_ADDR.staticcall(abi.encodePacked((key)));
 	require(success);
-	require(value.length == 32);
-	return abi.decode(value, (bytes32));
+    // decode value into a boolean status and a bytes32 value
+    (status, val) = abi.decode(value, (bool, bytes32));
     }
     
     function attestSgx(bytes memory userdata) public view returns (bytes memory) {

@@ -40,7 +40,7 @@ fn simulate() -> eyre::Result<()> {
         "function localRandom() returns (bytes32)",
         "function attestSgx(bytes) returns (bytes)",
         "function volatileSet(bytes32,bytes32)",
-        "function volatileGet(bytes32) returns (bytes32)",
+        "function volatileGet(bytes32) returns (bool, bytes32)",
         "function sha512(bytes) returns (bytes)",
         "struct HttpRequest { string url; string method; string[] headers; bytes body; bool withFlashbotsSignature; }",
         "function doHTTPRequest(HttpRequest memory request) returns (bytes memory)",
@@ -89,7 +89,7 @@ fn simulate() -> eyre::Result<()> {
     {
         let calldata = abi.encode(
             "volatileSet",
-            (Token::FixedBytes(mykey.clone()), Token::FixedBytes(myval)),
+            (Token::FixedBytes(mykey.clone()), Token::FixedBytes(myval.clone())),
         )?;
         evm.context.env.tx = TxEnv {
             caller: ADDR_A,
@@ -100,6 +100,7 @@ fn simulate() -> eyre::Result<()> {
         let _result = evm.transact()?;
         //dbg!(result);
     }
+        // Existing key test
     {
         let calldata = abi.encode("volatileGet", (Token::FixedBytes(mykey),))?;
         evm.context.env.tx = TxEnv {
@@ -110,15 +111,51 @@ fn simulate() -> eyre::Result<()> {
         };
         let result = evm.transact()?;
         let decoded = ethabi::decode(
-            &[ethabi::ParamType::FixedBytes(32)],
+            &[ethabi::ParamType::Bool, ethabi::ParamType::FixedBytes(32)],
             result.result.output().unwrap(),
         )?;
-        let val = match &decoded[0] {
+        let status = match &decoded[0] {
+            Token::Bool(b) => b,
+            _ => todo!(),
+        };
+        assert_eq!(status, &true);
+        let val = match &decoded[1] {
             Token::FixedBytes(b) => b,
             _ => todo!(),
         };
+        assert_eq!(val.to_vec(), myval);
+
         dbg!(std::str::from_utf8(val).unwrap());
     }
+        // Non-existing key test
+    {
+        let nonExistingKey = "beefdeadbeefdeadbeefdeadbeefdead".as_bytes().to_vec();
+        let calldata = abi.encode("volatileGet", (Token::FixedBytes(nonExistingKey),))?;
+        evm.context.env.tx = TxEnv {
+            caller: ADDR_A,
+            transact_to: revm::primitives::TransactTo::Call(ADDR_B),
+            data: revm::primitives::Bytes::from(calldata.0),
+            ..Default::default()
+        };
+        let result = evm.transact()?;
+        let decoded = ethabi::decode(
+            &[ethabi::ParamType::Bool, ethabi::ParamType::FixedBytes(32)],
+            result.result.output().unwrap(),
+        )?;
+        let status = match &decoded[0] {
+            Token::Bool(b) => b,
+            _ => todo!(),
+        };
+        assert_eq!(status, &false);
+        let val = match &decoded[1] {
+            Token::FixedBytes(b) => b,
+            _ => todo!(),
+        };
+        assert_eq!(val.to_vec(), vec![0u8; 32]);
+        //dbg!(std::str::from_utf8(val).unwrap());
+    }
+
+
 
     //////////////////////////
     // Suave.sha512
