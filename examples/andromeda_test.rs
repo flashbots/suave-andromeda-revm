@@ -206,6 +206,30 @@ fn simulate() -> eyre::Result<()> {
         assert_eq!(&outp, b"test test test");
         server.verify_and_clear();
     }
-
+    {
+        let calldata = abi.encode(
+            "doHTTPRequest",
+            (Token::Tuple(vec![
+                Token::String("https://status.flashbots.net/summary.json".to_string()),
+                Token::String(String::from("GET")),
+                Token::Array(vec![]),
+                Token::Bytes(vec![]),
+                Token::Bool(false),
+            ]),),
+        )?;
+        evm.context.env.tx = TxEnv {
+            caller: ADDR_A,
+            transact_to: revm::primitives::TransactTo::Call(ADDR_B),
+            data: revm::primitives::Bytes::from(calldata.0),
+            ..Default::default()
+        };
+        let result = evm.transact()?;
+        let decoded = ethabi::decode(&[ethabi::ParamType::Bytes], result.result.output().unwrap())?;
+        let outp = decoded[0]
+            .clone()
+            .into_bytes()
+            .expect("invalid output encoding");
+        assert_eq!(&outp, b"{\"page\":{\"name\":\"Flashbots\",\"url\":\"https://status.flashbots.net\",\"status\":\"UP\"}}");
+    }
     Ok(())
 }
