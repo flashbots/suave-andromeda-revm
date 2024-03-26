@@ -40,7 +40,7 @@ fn simulate() -> eyre::Result<()> {
         "function localRandom() returns (bytes32)",
         "function attestSgx(bytes) returns (bytes)",
         "function volatileSet(bytes32,bytes32)",
-        "function volatileGet(bytes32) returns (bytes32)",
+        "function volatileGet(bytes32) returns (bytes)",
         "function sha512(bytes) returns (bytes)",
         "struct HttpRequest { string url; string method; string[] headers; bytes body; bool withFlashbotsSignature; }",
         "function doHTTPRequest(HttpRequest memory request) returns (bytes memory)",
@@ -89,7 +89,7 @@ fn simulate() -> eyre::Result<()> {
     {
         let calldata = abi.encode(
             "volatileSet",
-            (Token::FixedBytes(mykey.clone()), Token::FixedBytes(myval)),
+            (Token::FixedBytes(mykey.clone()), Token::FixedBytes(myval.clone())),
         )?;
         evm.context.env.tx = TxEnv {
             caller: ADDR_A,
@@ -100,6 +100,7 @@ fn simulate() -> eyre::Result<()> {
         let _result = evm.transact()?;
         //dbg!(result);
     }
+    // Existing key test
     {
         let calldata = abi.encode("volatileGet", (Token::FixedBytes(mykey),))?;
         evm.context.env.tx = TxEnv {
@@ -109,16 +110,37 @@ fn simulate() -> eyre::Result<()> {
             ..Default::default()
         };
         let result = evm.transact()?;
-        let decoded = ethabi::decode(
-            &[ethabi::ParamType::FixedBytes(32)],
-            result.result.output().unwrap(),
-        )?;
+        let decoded = ethabi::decode(&[ethabi::ParamType::Bytes], result.result.output().unwrap())?;
         let val = match &decoded[0] {
-            Token::FixedBytes(b) => b,
+            Token::Bytes(b) => b,
             _ => todo!(),
         };
+        assert_eq!(val.to_vec(), myval.to_vec());
+        dbg!(std::str::from_utf8(val).unwrap());
+
+    }
+     // Non Existing key test
+     {
+        let notmykey = "deadbeefdeadbeefdeadbeefdeadbeff".as_bytes().to_vec();
+        let calldata = abi.encode("volatileGet", (Token::FixedBytes(notmykey),))?;
+        evm.context.env.tx = TxEnv {
+            caller: ADDR_A,
+            transact_to: revm::primitives::TransactTo::Call(ADDR_B),
+            data: revm::primitives::Bytes::from(calldata.0),
+            ..Default::default()
+        };
+        let result = evm.transact()?;
+        let decoded = ethabi::decode(&[ethabi::ParamType::Bytes], result.result.output().unwrap())?;
+        let val = match &decoded[0] {
+            Token::Bytes(b) => b,
+            _ => todo!(),
+        };
+        // empty vector 
+        let emptyvec: Vec<u8> = Vec::new();
+        assert_eq!(val.to_vec(), emptyvec.to_vec());
         dbg!(std::str::from_utf8(val).unwrap());
     }
+
 
     //////////////////////////
     // Suave.sha512
@@ -184,6 +206,30 @@ fn simulate() -> eyre::Result<()> {
         assert_eq!(&outp, b"test test test");
         server.verify_and_clear();
     }
-
+    {
+        let calldata = abi.encode(
+            "doHTTPRequest",
+            (Token::Tuple(vec![
+                Token::String("https://status.flashbots.net/summary.json".to_string()),
+                Token::String(String::from("GET")),
+                Token::Array(vec![]),
+                Token::Bytes(vec![]),
+                Token::Bool(false),
+            ]),),
+        )?;
+        evm.context.env.tx = TxEnv {
+            caller: ADDR_A,
+            transact_to: revm::primitives::TransactTo::Call(ADDR_B),
+            data: revm::primitives::Bytes::from(calldata.0),
+            ..Default::default()
+        };
+        let result = evm.transact()?;
+        let decoded = ethabi::decode(&[ethabi::ParamType::Bytes], result.result.output().unwrap())?;
+        let outp = decoded[0]
+            .clone()
+            .into_bytes()
+            .expect("invalid output encoding");
+        assert_eq!(&outp, b"{\"page\":{\"name\":\"Flashbots\",\"url\":\"https://status.flashbots.net\",\"status\":\"UP\"}}");
+    }
     Ok(())
 }

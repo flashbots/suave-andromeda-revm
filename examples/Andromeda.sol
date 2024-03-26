@@ -16,17 +16,16 @@ contract Andromeda {
 	require(success);
     }
 
-    function volatileGet(bytes32 key) public view returns (bytes32) {
+    function volatileGet(bytes32 key) public view returns (bytes memory) {
         (bool success, bytes memory value) = VOLATILEGET_ADDR.staticcall(abi.encodePacked((key)));
-	require(success);
-	require(value.length == 32);
-	return abi.decode(value, (bytes32));
+        require(success);
+        return abi.decode(value, (bytes));
     }
     
     function attestSgx(bytes memory userdata) public view returns (bytes memory) {
         (bool success, bytes memory attestBytes) = ATTEST_ADDR.staticcall(userdata);
-	require(success);
-	return attestBytes;
+        require(success);
+        return attestBytes;
     }
 
     function localRandom() payable public returns (bytes32) {
