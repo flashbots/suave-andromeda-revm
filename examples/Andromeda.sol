@@ -38,7 +38,7 @@ contract Andromeda {
         return bytes32(randomBytes);
     }
 
-    function verifyQuote(bytes memory quote, string memory pckCertPem, string memory pckCrlPem, string memory tcbInfoJson, string memory qeIdentityJson) external returns (uint) {
+    function verifyTDXDCAPQuote(bytes memory quote, string memory pckCertPem, string memory pckCrlPem, string memory tcbInfoJson, string memory qeIdentityJson) external returns (uint) {
         (bool success, bytes memory status) = TDX_DCAP_VERIFY.staticcall("");
         require(success);
         return abi.decode(status, (uint));
