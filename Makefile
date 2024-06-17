@@ -1,6 +1,7 @@
 .PHONY: contracts
 contracts:
 	forge build --revert-strings debug -C src/external_services --extra-output-files abi --out src/out
+	forge build --revert-strings debug -C src/precompiles --extra-output-files abi --out src/out
 	forge build --revert-strings debug -C examples/ --extra-output-files abi --out src/out
 
 .PHONY: build

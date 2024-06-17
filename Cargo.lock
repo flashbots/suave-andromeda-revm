@@ -6338,6 +6338,7 @@ dependencies = [
  "eyre",
  "futures",
  "helios",
+ "hex",
  "httptest",
  "lazy_static",
  "log",

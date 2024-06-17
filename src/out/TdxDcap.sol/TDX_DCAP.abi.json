@@ -1,0 +1,41 @@
+[
+  {
+    "type": "function",
+    "name": "verifyQuote",
+    "inputs": [
+      {
+        "name": "quote",
+        "type": "bytes",
+        "internalType": "bytes"
+      },
+      {
+        "name": "pckCertPem",
+        "type": "string",
+        "internalType": "string"
+      },
+      {
+        "name": "pckCrlPem",
+        "type": "string",
+        "internalType": "string"
+      },
+      {
+        "name": "tcbInfoJson",
+        "type": "string",
+        "internalType": "string"
+      },
+      {
+        "name": "qeIdentityJson",
+        "type": "string",
+        "internalType": "string"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "status",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable"
+  }
+]

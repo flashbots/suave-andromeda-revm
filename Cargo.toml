@@ -5,8 +5,9 @@ edition = "2021"
 
 [features]
 external_services = []
+tdx_dcap = []
 redis_external_services = ["external_services"]
-all = ["external_services", "redis_external_services"]
+all = ["tdx_dcap", "external_services", "redis_external_services"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -41,6 +42,7 @@ httptest = "0.15.5"
 alloy = { version = "0.2.0", features = ["sol-types"] }
 rcgen = "0.13.1"
 p256 = "0.13.2"
+hex = "0.4.3"
 
 [dev-dependencies]
 rustls-webpki = "0.102.5"
@@ -48,6 +50,12 @@ rustls-webpki = "0.102.5"
 [patch."https://github.com/bluealloy/revm"]
 revm = { git = "https://github.com/flashbots/revm.git", branch = "v40-msg-caller" }
 revm-primitives = { git = "https://github.com/flashbots/revm.git", branch = "v40-msg-caller" }
+
+
+[[bin]]
+name = "tdx_dcap_demo"
+required-features = ["tdx_dcap"]
+path = "./src/bin/tdx_dcap.rs"
 
 [[bin]]
 name = "services_manager"
