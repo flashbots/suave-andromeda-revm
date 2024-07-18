@@ -152,8 +152,8 @@ fn sgxattest_random(_input: &[u8], gas_limit: u64) -> PrecompileResult {
 }
 
 // Provides a persistent pendant to volatileGet.
-// It uses the mrenclave sealing key as a source to be persistent accross enclave restarts.
-// The original sealing key is derived via caller as the domain saperator
+// It uses the mrenclave sealing key as a source to be persistent across enclave restarts.
+// The original sealing key is derived via caller as the domain separator
 fn sgxattest_sealing_key(_input: &[u8], gas_limit: u64, env: &Env) -> PrecompileResult {
     let gas_used = 10000 as u64;
     if gas_used > gas_limit {
