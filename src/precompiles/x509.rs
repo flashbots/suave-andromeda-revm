@@ -25,11 +25,7 @@ fn generate_certificate(input: &[u8], gas_limit: u64) -> PrecompileResult {
     }
 
     let mut decoded = decode(
-        &[ParamType::Tuple(vec![
-            ParamType::Bytes,
-            ParamType::String,
-            ParamType::String,
-        ])],
+        &[ParamType::Bytes, ParamType::String, ParamType::String],
         input,
     )
     .map_err(|_| X509_INVALID_INPUT)?

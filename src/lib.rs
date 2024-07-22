@@ -13,6 +13,7 @@ pub mod precompiles {
     pub mod hash;
     pub mod http;
     pub mod lib;
+    pub mod p256;
     pub mod services_manager;
     pub mod sgxattest;
     pub mod x509;
