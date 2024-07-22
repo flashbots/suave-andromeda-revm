@@ -25,10 +25,10 @@ pub fn andromeda_precompiles() -> &'static Precompiles {
             .extend(hash_precompiles().inner.clone().into_iter());
         precompiles
             .inner
-            .extend(x509_precompiles().inner.clone().into_iter());
+            .extend(p256_precompiles().inner.clone().into_iter());
         precompiles
             .inner
-            .extend(p256_precompiles().inner.clone().into_iter());
+            .extend(x509_precompiles().inner.clone().into_iter());
         precompiles
             .inner
             .extend(http_precompiles().inner.clone().into_iter());

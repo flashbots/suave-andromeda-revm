@@ -13,7 +13,7 @@ use revm::precompile::{
 use crate::u64_to_address;
 
 pub const ECMUL: PrecompileWithAddress = PrecompileWithAddress::new(
-    u64_to_address(0x70700),
+    u64_to_address(0x60700),
     Precompile::Standard(ecmul as StandardPrecompileFn),
 );
 

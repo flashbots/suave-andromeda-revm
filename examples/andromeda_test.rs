@@ -44,6 +44,7 @@ fn simulate() -> eyre::Result<()> {
         "function sha512(bytes) returns (bytes)",
         "struct HttpRequest { string url; string method; string[] headers; bytes body; bool withFlashbotsSignature; }",
         "function doHTTPRequest(HttpRequest memory request) returns (bytes memory)",
+        "function generateX509(uint256 sk) returns (bytes memory)",
     ])?);
 
     //////////////////////////

@@ -6,7 +6,7 @@ use revm::precompile::{
 use crate::u64_to_address;
 
 pub const GENERATE_CERTIFICATE: PrecompileWithAddress = PrecompileWithAddress::new(
-    u64_to_address(0x60700),
+    u64_to_address(0x70700),
     Precompile::Standard(generate_certificate as StandardPrecompileFn),
 );
 
