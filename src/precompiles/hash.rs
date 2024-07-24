@@ -1,3 +1,4 @@
+use revm::precompile::PrecompileWithAddress;
 use revm::primitives::{
     Bytes, Precompile, PrecompileError, PrecompileErrors, PrecompileOutput, PrecompileResult,
     StandardPrecompileFn,

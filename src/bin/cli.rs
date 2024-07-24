@@ -85,7 +85,7 @@ async fn main() {
 }
 
 fn execute_tx<DB: Database>(mut db: DB, tx: TxEnv) -> Result<ExecutionResult, EVMError<DB::Error>> {
-    let mut env = Box::new(Env {
+    let env = Box::new(Env {
         tx,
         ..Default::default()
     });

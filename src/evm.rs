@@ -1,9 +1,8 @@
-use std::io;
 use std::sync::Arc;
 
 use revm::inspectors::TracerEip3155;
 use revm::primitives::{Env, SpecId::SHANGHAI};
-use revm::{inspector_handle_register, Database, GetInspector, Handler, Inspector};
+use revm::{inspector_handle_register, Database, Handler};
 use revm::{Evm, EvmBuilder};
 
 use crate::andromeda_precompiles;

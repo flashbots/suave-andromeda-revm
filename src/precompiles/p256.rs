@@ -6,28 +6,30 @@ use p256::elliptic_curve::{
     scalar::ScalarPrimitive,
     sec1::{Coordinates, EncodedPoint, FromEncodedPoint as _, ToEncodedPoint as _},
 };
-use revm::precompile::{
-    Precompile, PrecompileError, PrecompileResult, PrecompileWithAddress, StandardPrecompileFn,
+use reth_primitives::Bytes;
+use revm::{
+    precompile::{
+        Precompile, PrecompileError, PrecompileResult, PrecompileWithAddress, StandardPrecompileFn,
+    },
+    primitives::{PrecompileErrors, PrecompileOutput},
 };
 
 use crate::u64_to_address;
 
-pub const ECMUL: PrecompileWithAddress = PrecompileWithAddress::new(
+pub const ECMUL: PrecompileWithAddress = PrecompileWithAddress(
     u64_to_address(0x60700),
     Precompile::Standard(ecmul as StandardPrecompileFn),
 );
 
-const P256_INVALID_INPUT: PrecompileError =
-    PrecompileError::CustomPrecompileError("unable to abi-decode input");
-const P256_INVALID_POINT: PrecompileError = PrecompileError::CustomPrecompileError("invalid point");
-const P256_INVALID_SCALAR: PrecompileError =
-    PrecompileError::CustomPrecompileError("invalid scalar");
+const P256_INVALID_INPUT: &'static str = "unable to abi-decode input";
+const P256_INVALID_POINT: &'static str = "invalid point";
+const P256_INVALID_SCALAR: &'static str = "invalid scalar";
 
 // function ecmul(uint256 x, uint256 y, unint256 s) returns (uint256 x, uint256 y);
-fn ecmul(input: &[u8], gas_limit: u64) -> PrecompileResult {
+fn ecmul(input: &Bytes, gas_limit: u64) -> PrecompileResult {
     let gas_used = 10000 as u64;
     if gas_used > gas_limit {
-        return Err(PrecompileError::OutOfGas);
+        return Err(PrecompileError::OutOfGas.into());
     }
 
     let mut decoded = decode(
@@ -38,7 +40,7 @@ fn ecmul(input: &[u8], gas_limit: u64) -> PrecompileResult {
         ],
         input,
     )
-    .map_err(|_| P256_INVALID_INPUT)?
+    .map_err(|_| PrecompileErrors::Error(PrecompileError::Other(P256_INVALID_INPUT.into())))?
     .into_iter();
 
     fn bigint_to_bytes(n: U256) -> [u8; 32] {
@@ -51,30 +53,38 @@ fn ecmul(input: &[u8], gas_limit: u64) -> PrecompileResult {
         .next()
         .and_then(|t| t.into_uint())
         .map(bigint_to_bytes)
-        .ok_or(P256_INVALID_INPUT)?;
+        .ok_or(PrecompileErrors::Error(PrecompileError::Other(
+            P256_INVALID_INPUT.into(),
+        )))?;
     let y = decoded
         .next()
         .and_then(|t| t.into_uint())
         .map(bigint_to_bytes)
-        .ok_or(P256_INVALID_INPUT)?;
+        .ok_or(PrecompileErrors::Error(PrecompileError::Other(
+            P256_INVALID_INPUT.into(),
+        )))?;
     let s = decoded
         .next()
         .and_then(|t| t.into_uint())
         .map(bigint_to_bytes)
-        .ok_or(P256_INVALID_INPUT)?;
+        .ok_or(PrecompileErrors::Error(PrecompileError::Other(
+            P256_INVALID_INPUT.into(),
+        )))?;
     if decoded.next().is_some() {
-        return Err(P256_INVALID_INPUT)?;
+        return Err(PrecompileErrors::Error(PrecompileError::Other(
+            P256_INVALID_INPUT.into(),
+        )))?;
     }
 
     let point = Option::<p256::AffinePoint>::from(p256::AffinePoint::from_encoded_point(
         &EncodedPoint::<p256::NistP256>::from_affine_coordinates(&x.into(), &y.into(), false),
     ))
-    .ok_or_else(|| P256_INVALID_POINT)?;
+    .ok_or_else(|| PrecompileErrors::Error(PrecompileError::Other(P256_INVALID_POINT.into())))?;
     let scalar: p256::Scalar =
         Option::<ScalarPrimitive<p256::NistP256>>::from(
             ScalarPrimitive::<p256::NistP256>::from_bytes(&s.into()),
         )
-        .ok_or_else(|| P256_INVALID_SCALAR)?
+        .ok_or_else(|| PrecompileErrors::Error(PrecompileError::Other(P256_INVALID_SCALAR.into())))?
         .into();
 
     let result = (point * scalar).to_encoded_point(false);
@@ -86,7 +96,10 @@ fn ecmul(input: &[u8], gas_limit: u64) -> PrecompileResult {
         }
     };
 
-    Ok((gas_used, encode(&[Token::Uint(x), Token::Uint(y)])))
+    Ok(PrecompileOutput::new(
+        gas_used,
+        encode(&[Token::Uint(x), Token::Uint(y)]).into(),
+    ))
 }
 
 #[cfg(test)]
@@ -95,7 +108,7 @@ mod tests {
 
     #[test]
     fn test_ecmul() {
-        let (_, output) = ecmul(
+        let output = ecmul(
             &encode(&[
                 Token::Uint(
                     "0x6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296" // x = G_X
@@ -112,11 +125,12 @@ mod tests {
                         .parse()
                         .unwrap(),
                 ),
-            ]),
+            ])
+            .into(),
             10_000,
         )
         .unwrap();
-        let mut decoded = decode(&[ParamType::Uint(256), ParamType::Uint(256)], &output)
+        let mut decoded = decode(&[ParamType::Uint(256), ParamType::Uint(256)], &output.bytes)
             .unwrap()
             .into_iter();
         let ox = decoded.next().unwrap().into_uint().unwrap();

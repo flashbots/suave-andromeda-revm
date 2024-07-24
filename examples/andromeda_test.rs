@@ -1,12 +1,11 @@
 use revm::{
-    inspectors::TracerEip3155,
     primitives::{address, AccountInfo, Address, Bytecode, Bytes, Env, TxEnv},
     InMemoryDB,
 };
 
 use ethers::abi::{ethabi, parse_abi, JsonAbi, Token};
 use ethers::contract::{BaseContract, Lazy};
-use std::{include_str, io};
+use std::include_str;
 
 use suave_andromeda_revm::new_andromeda_revm;
 
@@ -34,7 +33,7 @@ fn simulate() -> eyre::Result<()> {
     };
     db.insert_account_info(ADDR_B, info);
 
-    let mut env = Box::new(Env::default());
+    let env = Box::new(Env::default());
     let mut evm = new_andromeda_revm(&mut db, env);
 
     let abi = BaseContract::from(parse_abi(&[
@@ -190,17 +189,22 @@ fn simulate() -> eyre::Result<()> {
     {
         let calldata = abi.encode(
             "generateX509",
-            (Token::Uint("89ed108f0366a89aaf12be76d0136157ab5967efd30cd131fdf69d4176ea32fc".parse()?),),
+            (Token::Uint(
+                "89ed108f0366a89aaf12be76d0136157ab5967efd30cd131fdf69d4176ea32fc".parse()?,
+            ),),
         )?;
 
-        evm.context.env.tx = TxEnv {
+        evm.context.evm.inner.env.tx = TxEnv {
             caller: ADDR_A,
             transact_to: revm::primitives::TransactTo::Call(ADDR_B),
             data: revm::primitives::Bytes::from(calldata.0),
             ..Default::default()
         };
         let result = evm.transact()?;
-        let decoded = ethabi::decode(&[ethabi::ParamType::Bytes], dbg!(result.result.output().unwrap()))?;
+        let decoded = ethabi::decode(
+            &[ethabi::ParamType::Bytes],
+            dbg!(result.result.output().unwrap()),
+        )?;
         let outp = decoded[0]
             .clone()
             .into_bytes()

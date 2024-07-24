@@ -18,7 +18,7 @@ use revm::{
     db::{CacheDB, EmptyDB},
     inspectors::TracerEip3155,
     primitives::{Address, B256, U256},
-    primitives::{BlockEnv, CfgEnv, EVMError, Env, ExecutionResult, MsgEnv, TxEnv},
+    primitives::{BlockEnv, EVMError, Env, ExecutionResult, TxEnv},
 };
 
 use ethers::core::types::{Block as EthersBlock, BlockNumber, TxHash};
@@ -123,7 +123,7 @@ impl StatefulExecutor {
             }),
         }?;
 
-        let mut env = Box::new(Env {
+        let env = Box::new(Env {
             tx,
             block: block_env,
             ..Default::default()
