@@ -1,11 +1,12 @@
 use revm::{
+    inspectors::TracerEip3155,
     primitives::{address, AccountInfo, Address, Bytecode, Bytes, Env, TxEnv},
     InMemoryDB,
 };
 
 use ethers::abi::{ethabi, parse_abi, JsonAbi, Token};
 use ethers::contract::{BaseContract, Lazy};
-use std::include_str;
+use std::{include_str, io};
 
 use suave_andromeda_revm::new_andromeda_revm;
 
@@ -34,7 +35,7 @@ fn simulate() -> eyre::Result<()> {
     db.insert_account_info(ADDR_B, info);
 
     let mut env = Box::new(Env::default());
-    let mut evm = new_andromeda_revm(&mut db, env, None);
+    let mut evm = new_andromeda_revm(&mut db, env);
 
     let abi = BaseContract::from(parse_abi(&[
         "function localRandom() returns (bytes32)",

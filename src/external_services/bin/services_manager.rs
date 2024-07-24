@@ -204,7 +204,7 @@ mod tests {
         /* Deploy the contract */
 
         let sample_contract_addr: Address = (|| {
-            let mut evm = new_andromeda_revm(&mut db, env.clone(), None);
+            let mut evm = new_andromeda_revm(&mut db, env.clone());
             evm.context.evm.inner.env.tx = TxEnv {
                 caller: ADDR_A,
                 transact_to: revm::primitives::TxKind::Create,
@@ -228,7 +228,7 @@ mod tests {
         {
             /* Ping */
             let mut tmp_db = db.clone();
-            let mut evm = new_andromeda_revm(&mut tmp_db, env.clone(), None);
+            let mut evm = new_andromeda_revm(&mut tmp_db, env.clone());
             let calldata = sample_contract_abi
                 .encode("ping", Token::Bytes(vec![0x01, 0x42]))
                 .unwrap();
@@ -252,7 +252,7 @@ mod tests {
             /* Test redis pubsub - requires redis running! */
             {
                 let mut tmp_db = db.clone();
-                let mut evm = new_andromeda_revm(&mut tmp_db, env.clone(), None);
+                let mut evm = new_andromeda_revm(&mut tmp_db, env.clone());
                 let calldata = sample_contract_abi
                     .encode("push_message", Token::Bytes(vec![0x01, 0x42]))
                     .unwrap();
@@ -271,7 +271,7 @@ mod tests {
 
             {
                 let mut tmp_db = db.clone();
-                let mut evm = new_andromeda_revm(&mut tmp_db, env.clone(), None);
+                let mut evm = new_andromeda_revm(&mut tmp_db, env.clone());
                 let calldata = sample_contract_abi.encode("get_message", ()).unwrap();
                 evm.context.evm.inner.env.tx = TxEnv {
                     caller: ADDR_A,
@@ -293,7 +293,7 @@ mod tests {
         #[cfg(feature = "redis_external_services")]
         {
             let mut tmp_db = db.clone();
-            let mut evm = new_andromeda_revm(&mut tmp_db, env.clone(), None);
+            let mut evm = new_andromeda_revm(&mut tmp_db, env.clone());
             let calldata = sample_contract_abi
                 .encode(
                     "addBundle",
@@ -320,7 +320,7 @@ mod tests {
         #[cfg(feature = "redis_external_services")]
         {
             let mut tmp_db = db.clone();
-            let mut evm = new_andromeda_revm(&mut tmp_db, env.clone(), None);
+            let mut evm = new_andromeda_revm(&mut tmp_db, env.clone());
             let calldata = sample_contract_abi
                 .encode("getBundlesByHeight", (Token::Uint(U256::from(31)),))
                 .unwrap();

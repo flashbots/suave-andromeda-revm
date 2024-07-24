@@ -90,7 +90,7 @@ fn execute_tx<DB: Database>(mut db: DB, tx: TxEnv) -> Result<ExecutionResult, EV
         ..Default::default()
     });
 
-    let mut evm = new_andromeda_revm(&mut db, env, None);
+    let mut evm = new_andromeda_revm(&mut db, env);
     match evm.transact() {
         Ok(evm_res) => Ok(evm_res.result),
         Err(err) => Err(err),

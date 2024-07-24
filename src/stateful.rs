@@ -1,3 +1,4 @@
+use crate::evm::new_andromeda_revm_wi;
 pub use crate::remote_db::{RemoteDB, RemoteDBError};
 
 use core::convert::Infallible;
@@ -136,12 +137,12 @@ impl StatefulExecutor {
         match match trace {
             true => {
                 let writer = Box::new(io::stderr());
-                let mut inspector = TracerEip3155::new(writer);
-                let mut evm_impl = new_andromeda_revm(&mut db, env, Some(&mut inspector));
+                let inspector = TracerEip3155::new(writer);
+                let mut evm_impl = new_andromeda_revm_wi(&mut db, env, inspector);
                 evm_impl.transact()
             }
             false => {
-                let mut evm_impl = new_andromeda_revm(&mut db, env, None);
+                let mut evm_impl = new_andromeda_revm(&mut db, env);
                 evm_impl.transact()
             }
         } {
