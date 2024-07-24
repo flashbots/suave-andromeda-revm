@@ -1,3 +1,4 @@
+use revm::primitives::AccessListItem;
 use std::collections::HashMap;
 use tokio::runtime::Handle;
 use tokio::task::block_in_place;
@@ -97,15 +98,15 @@ impl<SP: StateProvider, ExtDB: DatabaseRef> RemoteDB<SP, ExtDB> {
 
     pub fn prefetch_from_revm_access_list(
         &mut self,
-        access_list: Vec<(Address, Vec<U256>)>,
+        access_list: Vec<AccessListItem>,
     ) -> Result<(), StateProviderError> {
-        let ethers_slots_vec = Vec::from_iter(access_list.iter().map(|(addr, slots_vec)| {
+        let ethers_slots_vec = Vec::from_iter(access_list.iter().map(|it| {
             let ethers_slots = Vec::from_iter(
-                slots_vec
+                it.storage_keys
                     .iter()
-                    .map(|slot| EH256::from_slice(slot.to_be_bytes_vec().as_slice())),
+                    .map(|slot| EH256::from_slice(slot.as_slice())),
             );
-            (*addr, ethers_slots)
+            (it.address, ethers_slots)
         }));
 
         let ethers_access_list_slices = Vec::from_iter(
@@ -219,20 +220,22 @@ impl<SP: StateProvider, ExtDB: DatabaseRef> Database for RemoteDB<SP, ExtDB> {
         }
     }
 
-    fn block_hash(&mut self, number: U256) -> Result<B256, Self::Error> {
+    fn block_hash(&mut self, number: u64) -> Result<B256, Self::Error> {
         /* TODO: consider whether we should fetch the block hash, maybe we should just refuse */
-        match self.db.block_hashes.entry(number) {
+        match self.db.block_hashes.entry(U256::from(number)) {
             Entry::Occupied(entry) => Ok(*entry.get()),
-            Entry::Vacant(entry) => match self.state_provider.fetch_block_hash(number) {
-                Ok(hash) => {
-                    entry.insert(hash);
-                    Ok(hash)
+            Entry::Vacant(entry) => {
+                match self.state_provider.fetch_block_hash(U256::from(number)) {
+                    Ok(hash) => {
+                        entry.insert(hash);
+                        Ok(hash)
+                    }
+                    Err(_) => match self.db.block_hash(number) {
+                        Ok(hash) => Ok(hash),
+                        Err(err) => Err(RemoteDBError::Database(err)),
+                    },
                 }
-                Err(_) => match self.db.block_hash(number) {
-                    Ok(hash) => Ok(hash),
-                    Err(err) => Err(RemoteDBError::Database(err)),
-                },
-            },
+            }
         }
     }
 }

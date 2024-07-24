@@ -6,6 +6,7 @@ edition = "2021"
 [features]
 external_services = []
 redis_external_services = ["external_services"]
+all = ["external_services", "redis_external_services"]
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -16,7 +17,7 @@ sha2 = { version = "0.10", features = ["std"], default-features = false }
 futures = "0.3"
 log = { version = "0.4", features = ["std"] }
 ethers = "2.0.11"
-revm = { git = "https://github.com/flashbots/revm.git", branch = "extensible-precompiles", features = ["serde"] }
+revm = { git = "https://github.com/flashbots/revm.git", branch = "v40-msg-caller", features = ["std", "serde-json"] }
 helios = { git = "https://github.com/a16z/helios", branch = "master" }
 common = { git = "https://github.com/a16z/helios", branch = "master" }
 lazy_static = { version = "1.4.0" }
@@ -27,7 +28,7 @@ serde_json = "1.0.108"
 
 # consensus
 consensus = { git = "https://github.com/a16z/helios", branch = "master" }
-reth-primitives = { git = "https://github.com/paradigmxyz/reth", tag = "v0.1.0-alpha.11"}
+reth-primitives = { git = "https://github.com/paradigmxyz/reth", tag = "v1.0.0"}
 ssz-rs = { package = "ssz_rs", version = "0.9.0" }
 eyre = "0.6.8"
 tracing = "0.1.37"
@@ -37,6 +38,7 @@ tiny_http = "0.12.0"
 regex = "1.10.3"
 redis = { version = "0.24.0", features = ["tokio-comp", "connection-manager"] }
 httptest = "0.15.5"
+alloy = { version = "0.2.0", features = ["sol-types"] }
 rcgen = "0.13.1"
 p256 = "0.13.2"
 
@@ -44,8 +46,8 @@ p256 = "0.13.2"
 rustls-webpki = "0.102.5"
 
 [patch."https://github.com/bluealloy/revm"]
-revm = { git = "https://github.com/flashbots/revm.git", branch = "extensible-precompiles" }
-revm-primitives = { git = "https://github.com/flashbots/revm.git", branch = "extensible-precompiles" }
+revm = { git = "https://github.com/flashbots/revm.git", branch = "v40-msg-caller" }
+revm-primitives = { git = "https://github.com/flashbots/revm.git", branch = "v40-msg-caller" }
 
 [[bin]]
 name = "services_manager"

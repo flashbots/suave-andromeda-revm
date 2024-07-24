@@ -1,3 +1,4 @@
+use crate::evm::new_andromeda_revm_wi;
 pub use crate::remote_db::{RemoteDB, RemoteDBError};
 
 use core::convert::Infallible;
@@ -16,10 +17,8 @@ use helios::prelude::Block;
 use revm::{
     db::{CacheDB, EmptyDB},
     inspectors::TracerEip3155,
-    primitives::SpecId,
     primitives::{Address, B256, U256},
-    primitives::{BlockEnv, CfgEnv, EVMError, Env, ExecutionResult, MsgEnv, TxEnv},
-    Transact,
+    primitives::{BlockEnv, EVMError, Env, ExecutionResult, TxEnv},
 };
 
 use ethers::core::types::{Block as EthersBlock, BlockNumber, TxHash};
@@ -124,19 +123,11 @@ impl StatefulExecutor {
             }),
         }?;
 
-        let mut cfg = CfgEnv::default();
-        cfg.spec_id = SpecId::SHANGHAI;
-
-        let msg = MsgEnv {
-            caller: tx.caller.clone(),
-        };
-
-        let mut env = Env {
-            cfg,
-            msg,
+        let env = Box::new(Env {
             tx,
             block: block_env,
-        };
+            ..Default::default()
+        });
 
         let mut db = RemoteDB::new(
             self.rpc_state_provider.clone(),
@@ -146,12 +137,12 @@ impl StatefulExecutor {
         match match trace {
             true => {
                 let writer = Box::new(io::stderr());
-                let mut inspector = TracerEip3155::new(writer, true, true);
-                let mut evm_impl = new_andromeda_revm(&mut db, &mut env, Some(&mut inspector));
+                let inspector = TracerEip3155::new(writer);
+                let mut evm_impl = new_andromeda_revm_wi(&mut db, env, inspector);
                 evm_impl.transact()
             }
             false => {
-                let mut evm_impl = new_andromeda_revm(&mut db, &mut env, None);
+                let mut evm_impl = new_andromeda_revm(&mut db, env);
                 evm_impl.transact()
             }
         } {

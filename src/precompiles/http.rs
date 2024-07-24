@@ -4,39 +4,33 @@ use reqwest::blocking::Client as ReqwestClient;
 use reqwest::header::{HeaderMap, HeaderName, HeaderValue};
 
 use ethers::abi::{decode, encode, ParamType, Token};
+use reth_primitives::Bytes;
 use revm::precompile::{
     Precompile, PrecompileError, PrecompileResult, PrecompileWithAddress, StandardPrecompileFn,
 };
+use revm::primitives::{PrecompileErrors, PrecompileOutput};
 
 use crate::u64_to_address;
 
-pub const HTTP_CALL: PrecompileWithAddress = PrecompileWithAddress::new(
+pub const HTTP_CALL: PrecompileWithAddress = PrecompileWithAddress(
     u64_to_address(0x43200002),
     Precompile::Standard(httpcall as StandardPrecompileFn),
 );
 
-const HTTP_CANNOT_REQUEST: PrecompileError =
-    PrecompileError::CustomPrecompileError("unable to perform http request");
-const HTTP_CANNOT_DECODE_RESP: PrecompileError =
-    PrecompileError::CustomPrecompileError("unable to decode http call response");
+const HTTP_CANNOT_REQUEST: &'static str = "unable to perform http request";
+const HTTP_CANNOT_DECODE_RESP: &'static str = "unable to decode http call response";
+const HTTP_INVALID_INPUT: &'static str = "unable to abi-decode input";
+const HTTP_FLASHBOTS_SIG_NOT_SUPPORTED: &'static str =
+    "flashbots signature not allowed in http calls";
+const HTTP_INVALID_URL: &'static str = "unable to abi-decode request url";
+const HTTP_INVALID_METHOD: &'static str = "unable to abi-decode request method";
+const HTTP_INVALID_HEADER: &'static str = "unable to abi-decode request header";
+const HTTP_INVALID_DATA: &'static str = "unable to abi-decode request data";
 
-const HTTP_INVALID_INPUT: PrecompileError =
-    PrecompileError::CustomPrecompileError("unable to abi-decode input");
-const HTTP_FLASHBOTS_SIG_NOT_SUPPORTED: PrecompileError =
-    PrecompileError::CustomPrecompileError("flashbots signature not allowed in http calls");
-const HTTP_INVALID_URL: PrecompileError =
-    PrecompileError::CustomPrecompileError("unable to abi-decode request url");
-const HTTP_INVALID_METHOD: PrecompileError =
-    PrecompileError::CustomPrecompileError("unable to abi-decode request method");
-const HTTP_INVALID_HEADER: PrecompileError =
-    PrecompileError::CustomPrecompileError("unable to abi-decode request header");
-const HTTP_INVALID_DATA: PrecompileError =
-    PrecompileError::CustomPrecompileError("unable to abi-decode request data");
-
-fn httpcall(input: &[u8], gas_limit: u64) -> PrecompileResult {
+fn httpcall(input: &Bytes, gas_limit: u64) -> PrecompileResult {
     let gas_used = 10000 as u64;
     if gas_used > gas_limit {
-        return Err(PrecompileError::OutOfGas);
+        return Err(PrecompileError::OutOfGas.into());
     }
 
     /* Decode the ABI input (url, method, body)
@@ -57,87 +51,119 @@ fn httpcall(input: &[u8], gas_limit: u64) -> PrecompileResult {
         ])],
         input,
     )
-    .map_err(|_e| HTTP_INVALID_INPUT)?;
+    .map_err(|_e| PrecompileErrors::Error(PrecompileError::Other(HTTP_INVALID_INPUT.into())))?;
 
     let input_tuple_raw = decoded[0]
         .to_owned()
         .into_tuple()
-        .ok_or(HTTP_INVALID_INPUT)?;
+        .ok_or(PrecompileErrors::Error(PrecompileError::Other(
+            HTTP_INVALID_INPUT.into(),
+        )))?;
     let input_tuple = input_tuple_raw.as_slice();
 
     if input_tuple[4]
         .to_owned()
         .into_bool()
-        .ok_or(HTTP_INVALID_INPUT)?
+        .ok_or(PrecompileErrors::Error(PrecompileError::Other(
+            HTTP_INVALID_INPUT.into(),
+        )))?
     {
-        return Err(HTTP_FLASHBOTS_SIG_NOT_SUPPORTED);
+        return Err(PrecompileErrors::Error(PrecompileError::Other(
+            HTTP_FLASHBOTS_SIG_NOT_SUPPORTED.into(),
+        )));
     }
 
     let url = input_tuple[0]
         .to_owned()
         .into_string()
-        .ok_or(HTTP_INVALID_URL)?;
+        .ok_or(PrecompileErrors::Error(PrecompileError::Other(
+            HTTP_INVALID_URL.into(),
+        )))?;
 
     let method = input_tuple[1]
         .to_owned()
         .into_string()
-        .ok_or(HTTP_INVALID_METHOD)?
+        .ok_or(PrecompileErrors::Error(PrecompileError::Other(
+            HTTP_INVALID_METHOD.into(),
+        )))?
         .to_lowercase();
 
     if method != "get" && method != "post" {
-        return Err(HTTP_INVALID_METHOD);
+        return Err(PrecompileErrors::Error(PrecompileError::Other(
+            HTTP_INVALID_METHOD.into(),
+        )));
     }
 
     let req_data = input_tuple[3]
         .to_owned()
         .into_bytes()
-        .ok_or(HTTP_INVALID_DATA)?;
+        .ok_or(PrecompileErrors::Error(PrecompileError::Other(
+            HTTP_INVALID_DATA.into(),
+        )))?;
 
     if method == "get" && req_data.len() != 0 {
-        return Err(HTTP_INVALID_DATA);
+        return Err(PrecompileErrors::Error(PrecompileError::Other(
+            HTTP_INVALID_DATA.into(),
+        )));
     }
 
     let headers_data = input_tuple[2]
         .to_owned()
         .into_array()
-        .ok_or(HTTP_INVALID_HEADER)?;
+        .ok_or(PrecompileErrors::Error(PrecompileError::Other(
+            HTTP_INVALID_HEADER.into(),
+        )))?;
 
     let mut headers = HeaderMap::new();
     for raw_header_data in headers_data {
-        let raw_header_string = raw_header_data.into_string().ok_or(HTTP_INVALID_HEADER)?;
+        let raw_header_string = raw_header_data
+            .into_string()
+            .ok_or(PrecompileErrors::Error(PrecompileError::Other(
+                HTTP_INVALID_HEADER.into(),
+            )))?;
         let (key, value) = raw_header_string
             .split_once(":")
-            .ok_or(HTTP_INVALID_HEADER)?;
+            .ok_or(PrecompileErrors::Error(PrecompileError::Other(
+                HTTP_INVALID_HEADER.into(),
+            )))?;
 
         headers.append(
-            HeaderName::from_str(key.trim()).map_err(|_e| HTTP_INVALID_HEADER)?,
-            HeaderValue::from_str(value.trim()).map_err(|_e| HTTP_INVALID_HEADER)?,
+            HeaderName::from_str(key.trim()).map_err(|_e| {
+                PrecompileErrors::Error(PrecompileError::Other(HTTP_INVALID_HEADER.into()))
+            })?,
+            HeaderValue::from_str(value.trim()).map_err(|_e| {
+                PrecompileErrors::Error(PrecompileError::Other(HTTP_INVALID_HEADER.into()))
+            })?,
         );
     }
 
     // Perform the HTTP call
     let client = ReqwestClient::new();
     let response = (|| match method.as_str() {
-        "get" => client
-            .get(url)
-            .headers(headers)
-            .send()
-            .map_err(|_e| HTTP_CANNOT_REQUEST),
+        "get" => client.get(url).headers(headers).send().map_err(|_e| {
+            PrecompileErrors::Error(PrecompileError::Other(HTTP_CANNOT_REQUEST.into()))
+        }),
         "post" => client
             .post(url)
             .headers(headers)
             .body(req_data)
             .send()
-            .map_err(|_e| HTTP_CANNOT_REQUEST),
-        _ => Err(HTTP_INVALID_METHOD),
+            .map_err(|_e| {
+                PrecompileErrors::Error(PrecompileError::Other(HTTP_CANNOT_REQUEST.into()))
+            }),
+        _ => Err(PrecompileErrors::Error(PrecompileError::Other(
+            HTTP_INVALID_METHOD.into(),
+        ))),
     })()?;
 
-    let response_body = response.bytes().map_err(|_e| HTTP_CANNOT_DECODE_RESP)?;
+    let response_body = response.bytes().map_err(|_e| {
+        PrecompileErrors::Error(PrecompileError::Other(HTTP_CANNOT_DECODE_RESP.into()))
+    })?;
 
     // ABI-encode the response
     let encoded_response = encode(&[Token::Bytes(response_body.to_vec())]);
 
-    Ok((gas_used, encoded_response))
+    Ok(PrecompileOutput::new(gas_used, encoded_response.into()))
 }
 
 #[cfg(test)]
@@ -168,9 +194,9 @@ mod tests {
                 Token::Bytes(String::from("xoxo").into_bytes()),
                 Token::Bool(false),
             ])]);
-            let res = httpcall(&input, 10000).expect("http call did not succeed");
+            let res = httpcall(&input.into(), 10000).expect("http call did not succeed");
             assert_eq!(
-                res.1,
+                res.bytes,
                 encode(&[Token::Bytes(String::from("test test test").into_bytes())])
             );
 
@@ -194,9 +220,9 @@ mod tests {
                 Token::Bytes(vec![]),
                 Token::Bool(false),
             ])]);
-            let res = httpcall(&input, 10000).expect("http call did not succeed");
+            let res = httpcall(&input.into(), 10000).expect("http call did not succeed");
             assert_eq!(
-                res.1,
+                res.bytes,
                 encode(&[Token::Bytes(String::from("test test test").into_bytes())])
             );
 
@@ -212,7 +238,12 @@ mod tests {
                 Token::Bytes(String::from("xoxo").into_bytes()),
                 Token::Bool(false),
             ])]);
-            assert_eq!(httpcall(&input, 10000), Err(HTTP_INVALID_DATA));
+            assert_eq!(
+                httpcall(&input.into(), 10000),
+                Err(PrecompileErrors::Error(PrecompileError::Other(
+                    HTTP_INVALID_DATA.into(),
+                )))
+            );
         }
 
         {
@@ -225,8 +256,10 @@ mod tests {
                 Token::Bool(true),
             ])]);
             assert_eq!(
-                httpcall(&input, 10000),
-                Err(HTTP_FLASHBOTS_SIG_NOT_SUPPORTED)
+                httpcall(&input.into(), 10000),
+                Err(PrecompileErrors::Error(PrecompileError::Other(
+                    HTTP_FLASHBOTS_SIG_NOT_SUPPORTED.into(),
+                )))
             );
         }
 

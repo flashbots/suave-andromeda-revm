@@ -1,8 +1,9 @@
+use reth_primitives::Bytes;
 use revm::precompile::{
     EnvPrecompileFn, Precompile, PrecompileError, PrecompileResult, PrecompileWithAddress,
     StandardPrecompileFn,
 };
-use revm::primitives::Env;
+use revm::primitives::{Env, PrecompileErrors, PrecompileOutput};
 
 use ethers::abi::{encode_packed, Token};
 use ethers::types::H160;
@@ -15,27 +16,27 @@ use std::{fs, fs::File, io::Read, io::Write, path::Path};
 
 use crate::u64_to_address;
 
-pub const ATTEST: PrecompileWithAddress = PrecompileWithAddress::new(
+pub const ATTEST: PrecompileWithAddress = PrecompileWithAddress(
     u64_to_address(0x40700),
     Precompile::Env(sgxattest_run as EnvPrecompileFn),
 );
 
-pub const VOLATILESET: PrecompileWithAddress = PrecompileWithAddress::new(
+pub const VOLATILESET: PrecompileWithAddress = PrecompileWithAddress(
     u64_to_address(0x40701),
     Precompile::Env(sgxattest_volatile_set as EnvPrecompileFn),
 );
 
-pub const VOLATILEGET: PrecompileWithAddress = PrecompileWithAddress::new(
+pub const VOLATILEGET: PrecompileWithAddress = PrecompileWithAddress(
     u64_to_address(0x40702),
     Precompile::Env(sgxattest_volatile_get as EnvPrecompileFn),
 );
 
-pub const RANDOM: PrecompileWithAddress = PrecompileWithAddress::new(
+pub const RANDOM: PrecompileWithAddress = PrecompileWithAddress(
     u64_to_address(0x40703),
     Precompile::Standard(sgxattest_random as StandardPrecompileFn),
 );
 
-pub const SEALINGKEY: PrecompileWithAddress = PrecompileWithAddress::new(
+pub const SEALINGKEY: PrecompileWithAddress = PrecompileWithAddress(
     u64_to_address(0x40704),
     Precompile::Env(sgxattest_sealing_key as EnvPrecompileFn),
 );
@@ -46,20 +47,19 @@ lazy_static! {
     static ref VOLATILE: Mutex<HashMap<[u8; 52], [u8; 32]>> = Mutex::new(HashMap::new());
 }
 
-const SGX_ATTESTATION_FAILED: PrecompileError =
-    PrecompileError::CustomPrecompileError("gramnie sgx attestation failed");
+const SGX_ATTESTATION_FAILED: &'static str = "gramnie sgx attestation failed";
+const SGX_VOLATILE_KEY_MISSING: &'static str = "key does not exist in volatile storage";
 
-const SGX_VOLATILE_KEY_MISSING: PrecompileError =
-    PrecompileError::CustomPrecompileError("key does not exist in volatile storage");
-
-fn sgxattest_run(input: &[u8], gas_limit: u64, env: &Env) -> PrecompileResult {
+fn sgxattest_run(input: &Bytes, gas_limit: u64, env: &Env) -> PrecompileResult {
     let gas_used = 10000 as u64;
     if gas_used > gas_limit {
-        return Err(PrecompileError::OutOfGas);
+        return Err(PrecompileError::OutOfGas.into());
     } else {
         // Attestation available
         if !Path::new("/dev/attestation/quote").exists() {
-            return Err(SGX_ATTESTATION_FAILED);
+            return Err(PrecompileErrors::Error(PrecompileError::Other(
+                SGX_ATTESTATION_FAILED.into(),
+            )));
         }
 
         // Write some user report data
@@ -97,16 +97,18 @@ fn sgxattest_run(input: &[u8], gas_limit: u64, env: &Env) -> PrecompileResult {
         //dbg!(&quote);
 
         // Copy the attestation quote to our output directory
-        return Ok((gas_used, quote));
+        return Ok(PrecompileOutput::new(gas_used, quote.into()));
     }
 }
 
-fn sgxattest_volatile_set(input: &[u8], gas_limit: u64, env: &Env) -> PrecompileResult {
+fn sgxattest_volatile_set(input: &Bytes, gas_limit: u64, env: &Env) -> PrecompileResult {
     let gas_used = 10000 as u64;
     if gas_used > gas_limit {
-        return Err(PrecompileError::OutOfGas);
+        return Err(PrecompileError::OutOfGas.into());
     } else if input.len() != 64 {
-        return Err(SGX_ATTESTATION_FAILED);
+        return Err(PrecompileErrors::Error(PrecompileError::Other(
+            SGX_ATTESTATION_FAILED.into(),
+        )));
     } else {
         let mut vol = VOLATILE.lock().unwrap();
         let domain_sep = env.msg.caller;
@@ -116,16 +118,18 @@ fn sgxattest_volatile_set(input: &[u8], gas_limit: u64, env: &Env) -> Precompile
         let mut val: [u8; 32] = [0; 32];
         val.copy_from_slice(&input[32..64]);
         vol.insert(key, val);
-        return Ok((gas_used, vec![]));
+        return Ok(PrecompileOutput::new(gas_used, Bytes::new()));
     }
 }
 
-fn sgxattest_volatile_get(input: &[u8], gas_limit: u64, env: &Env) -> PrecompileResult {
+fn sgxattest_volatile_get(input: &Bytes, gas_limit: u64, env: &Env) -> PrecompileResult {
     let gas_used = 10000 as u64;
     if gas_used > gas_limit {
-        return Err(PrecompileError::OutOfGas);
+        return Err(PrecompileError::OutOfGas.into());
     } else if input.len() != 32 {
-        return Err(SGX_ATTESTATION_FAILED);
+        return Err(PrecompileErrors::Error(PrecompileError::Other(
+            SGX_ATTESTATION_FAILED.into(),
+        )));
     } else {
         let vol = VOLATILE.lock().unwrap();
         let domain_sep = env.msg.caller;
@@ -133,38 +137,42 @@ fn sgxattest_volatile_get(input: &[u8], gas_limit: u64, env: &Env) -> Precompile
         key[0..20].copy_from_slice(&domain_sep.0 .0);
         key[20..52].copy_from_slice(&input[0..32]);
         if let Some(val) = vol.get(&key) {
-            return Ok((gas_used, val.to_vec()));
+            return Ok(PrecompileOutput::new(gas_used, val.to_owned().into()));
         }
-        return Err(SGX_VOLATILE_KEY_MISSING);
+        return Err(PrecompileErrors::Error(PrecompileError::Other(
+            SGX_VOLATILE_KEY_MISSING.into(),
+        )));
     }
 }
 
-fn sgxattest_random(_input: &[u8], gas_limit: u64) -> PrecompileResult {
+fn sgxattest_random(_input: &Bytes, gas_limit: u64) -> PrecompileResult {
     let gas_used = 10000 as u64;
     if gas_used > gas_limit {
-        return Err(PrecompileError::OutOfGas);
+        return Err(PrecompileError::OutOfGas.into());
     } else {
         let mut file = std::fs::File::open("/dev/urandom").unwrap();
         let mut buffer = [0; 32];
         file.read(&mut buffer[..]).unwrap();
-        return Ok((gas_used, buffer.to_vec()));
+        return Ok(PrecompileOutput::new(gas_used, buffer.into()));
     }
 }
 
 // Provides a persistent pendant to volatileGet.
 // It uses the mrenclave sealing key as a source to be persistent across enclave restarts.
 // The original sealing key is derived via caller as the domain separator
-fn sgxattest_sealing_key(_input: &[u8], gas_limit: u64, env: &Env) -> PrecompileResult {
+fn sgxattest_sealing_key(_input: &Bytes, gas_limit: u64, env: &Env) -> PrecompileResult {
     let gas_used = 10000 as u64;
     if gas_used > gas_limit {
-        return Err(PrecompileError::OutOfGas);
+        return Err(PrecompileError::OutOfGas.into());
     }
 
     let path = Path::new("/dev/attestation/keys/_sgx_mrenclave");
 
     // Sealing key available
     if !path.exists() {
-        return Err(SGX_ATTESTATION_FAILED);
+        return Err(PrecompileErrors::Error(PrecompileError::Other(
+            SGX_ATTESTATION_FAILED.into(),
+        )));
     }
 
     // Get the mrenclave sealing key
@@ -191,5 +199,5 @@ fn sgxattest_sealing_key(_input: &[u8], gas_limit: u64, env: &Env) -> Precompile
         }
     };
 
-    Ok((gas_used, keccak256(encoded).to_vec()))
+    Ok(PrecompileOutput::new(gas_used, keccak256(encoded).into()))
 }

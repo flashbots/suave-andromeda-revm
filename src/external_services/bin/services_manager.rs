@@ -17,13 +17,13 @@ type HandlerFn =
 #[derive(Parser)]
 struct Cli {
     /// The rpc endpoint to connect to
-    #[arg(short, long, default_value_t = String::from("redis://127.0.0.1:6379/"))]
+    #[arg(long, default_value_t = String::from("redis://127.0.0.1:6379/"))]
     kv_redis_endpoint: String,
-    #[arg(short, long, default_value_t = String::from("redis://127.0.0.1:6379/"))]
+    #[arg(long, default_value_t = String::from("redis://127.0.0.1:6379/"))]
     pubsub_redis_endpoint: String,
-    #[arg(short, long, default_value_t = String::from("0.0.0.0"))]
+    #[arg(long, default_value_t = String::from("0.0.0.0"))]
     host: String,
-    #[arg(short, long, default_value_t = String::from("5605"))]
+    #[arg(long, default_value_t = String::from("5605"))]
     port: String,
 }
 
@@ -131,7 +131,7 @@ mod tests {
     use revm::{
         self,
         primitives::{address, Address, Env, TxEnv},
-        DatabaseCommit, InMemoryDB, Transact,
+        DatabaseCommit, InMemoryDB,
     };
 
     use ethers;
@@ -199,15 +199,15 @@ mod tests {
 
         let mut db = InMemoryDB::default();
 
-        let mut env = Env::default();
+        let mut env = Box::new(Env::default());
 
         /* Deploy the contract */
 
         let sample_contract_addr: Address = (|| {
-            let mut evm = new_andromeda_revm(&mut db, &mut env, None);
-            evm.context.env.tx = TxEnv {
+            let mut evm = new_andromeda_revm(&mut db, env.clone());
+            evm.context.evm.inner.env.tx = TxEnv {
                 caller: ADDR_A,
-                transact_to: revm::primitives::TransactTo::create(),
+                transact_to: revm::primitives::TxKind::Create,
                 data: revm::primitives::Bytes::from(SAMPLE_JSON_ABI.bytecode().unwrap().0),
                 ..Default::default()
             };
@@ -215,7 +215,7 @@ mod tests {
             assert!(exec_result.result.is_success());
             if let revm::primitives::ExecutionResult::Success { output, .. } = exec_result.result {
                 if let revm::primitives::Output::Create(_code, contract_addr) = output {
-                    evm.context.db.commit(exec_result.state);
+                    evm.context.evm.inner.db.commit(exec_result.state);
                     return Ok(contract_addr.unwrap());
                 }
             }
@@ -228,11 +228,11 @@ mod tests {
         {
             /* Ping */
             let mut tmp_db = db.clone();
-            let mut evm = new_andromeda_revm(&mut tmp_db, &mut env, None);
+            let mut evm = new_andromeda_revm(&mut tmp_db, env.clone());
             let calldata = sample_contract_abi
                 .encode("ping", Token::Bytes(vec![0x01, 0x42]))
                 .unwrap();
-            evm.context.env.tx = TxEnv {
+            evm.context.evm.inner.env.tx = TxEnv {
                 caller: ADDR_A,
                 transact_to: revm::primitives::TransactTo::Call(sample_contract_addr),
                 data: revm::primitives::Bytes::from(calldata.0),
@@ -252,11 +252,11 @@ mod tests {
             /* Test redis pubsub - requires redis running! */
             {
                 let mut tmp_db = db.clone();
-                let mut evm = new_andromeda_revm(&mut tmp_db, &mut env, None);
+                let mut evm = new_andromeda_revm(&mut tmp_db, env.clone());
                 let calldata = sample_contract_abi
                     .encode("push_message", Token::Bytes(vec![0x01, 0x42]))
                     .unwrap();
-                evm.context.env.tx = TxEnv {
+                evm.context.evm.inner.env.tx = TxEnv {
                     caller: ADDR_A,
                     transact_to: revm::primitives::TransactTo::Call(sample_contract_addr),
                     data: revm::primitives::Bytes::from(calldata.0),
@@ -271,9 +271,9 @@ mod tests {
 
             {
                 let mut tmp_db = db.clone();
-                let mut evm = new_andromeda_revm(&mut tmp_db, &mut env, None);
+                let mut evm = new_andromeda_revm(&mut tmp_db, env.clone());
                 let calldata = sample_contract_abi.encode("get_message", ()).unwrap();
-                evm.context.env.tx = TxEnv {
+                evm.context.evm.inner.env.tx = TxEnv {
                     caller: ADDR_A,
                     transact_to: revm::primitives::TransactTo::Call(sample_contract_addr),
                     data: revm::primitives::Bytes::from(calldata.0),
@@ -293,7 +293,7 @@ mod tests {
         #[cfg(feature = "redis_external_services")]
         {
             let mut tmp_db = db.clone();
-            let mut evm = new_andromeda_revm(&mut tmp_db, &mut env, None);
+            let mut evm = new_andromeda_revm(&mut tmp_db, env.clone());
             let calldata = sample_contract_abi
                 .encode(
                     "addBundle",
@@ -304,7 +304,7 @@ mod tests {
                     ),),
                 )
                 .unwrap();
-            evm.context.env.tx = TxEnv {
+            evm.context.evm.inner.env.tx = TxEnv {
                 caller: ADDR_A,
                 transact_to: revm::primitives::TransactTo::Call(sample_contract_addr),
                 data: revm::primitives::Bytes::from(calldata.0),
@@ -320,11 +320,11 @@ mod tests {
         #[cfg(feature = "redis_external_services")]
         {
             let mut tmp_db = db.clone();
-            let mut evm = new_andromeda_revm(&mut tmp_db, &mut env, None);
+            let mut evm = new_andromeda_revm(&mut tmp_db, env.clone());
             let calldata = sample_contract_abi
                 .encode("getBundlesByHeight", (Token::Uint(U256::from(31)),))
                 .unwrap();
-            evm.context.env.tx = TxEnv {
+            evm.context.evm.inner.env.tx = TxEnv {
                 caller: ADDR_A,
                 transact_to: revm::primitives::TransactTo::Call(sample_contract_addr),
                 data: revm::primitives::Bytes::from(calldata.0),

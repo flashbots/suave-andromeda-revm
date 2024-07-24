@@ -7,7 +7,7 @@ pub use stateful::{StatefulExecutor, StatefulExecutorConfig};
 pub mod consensus;
 
 pub mod evm;
-pub use evm::new_andromeda_revm;
+pub use evm::{new_andromeda_revm, new_andromeda_revm_wi};
 
 pub mod precompiles {
     pub mod hash;
