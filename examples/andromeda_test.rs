@@ -1,6 +1,6 @@
 use revm::{
     primitives::{address, AccountInfo, Address, Bytecode, Bytes, Env, TxEnv},
-    InMemoryDB, Transact,
+    InMemoryDB,
 };
 
 use ethers::abi::{ethabi, parse_abi, JsonAbi, Token};
@@ -33,8 +33,8 @@ fn simulate() -> eyre::Result<()> {
     };
     db.insert_account_info(ADDR_B, info);
 
-    let mut env = Env::default();
-    let mut evm = new_andromeda_revm(&mut db, &mut env, None);
+    let mut env = Box::new(Env::default());
+    let mut evm = new_andromeda_revm(&mut db, env, None);
 
     let abi = BaseContract::from(parse_abi(&[
         "function localRandom() returns (bytes32)",
@@ -52,7 +52,7 @@ fn simulate() -> eyre::Result<()> {
     //////////////////////////
     {
         let calldata = abi.encode("localRandom", ())?;
-        evm.context.env.tx = TxEnv {
+        evm.context.evm.inner.env.tx = TxEnv {
             caller: ADDR_A,
             transact_to: revm::primitives::TransactTo::Call(ADDR_B),
             data: revm::primitives::Bytes::from(calldata.0),
@@ -67,7 +67,7 @@ fn simulate() -> eyre::Result<()> {
     //////////////////////////
     {
         let calldata = abi.encode("attestSgx", (Token::Bytes("hello".as_bytes().to_vec()),))?;
-        evm.context.env.tx = TxEnv {
+        evm.context.evm.inner.env.tx = TxEnv {
             transact_to: revm::primitives::TransactTo::Call(ADDR_B),
             data: revm::primitives::Bytes::from(calldata.0),
             ..Default::default()
@@ -92,7 +92,7 @@ fn simulate() -> eyre::Result<()> {
             "volatileSet",
             (Token::FixedBytes(mykey.clone()), Token::FixedBytes(myval)),
         )?;
-        evm.context.env.tx = TxEnv {
+        evm.context.evm.inner.env.tx = TxEnv {
             caller: ADDR_A,
             transact_to: revm::primitives::TransactTo::Call(ADDR_B),
             data: revm::primitives::Bytes::from(calldata.0),
@@ -103,7 +103,7 @@ fn simulate() -> eyre::Result<()> {
     }
     {
         let calldata = abi.encode("volatileGet", (Token::FixedBytes(mykey),))?;
-        evm.context.env.tx = TxEnv {
+        evm.context.evm.inner.env.tx = TxEnv {
             caller: ADDR_A,
             transact_to: revm::primitives::TransactTo::Call(ADDR_B),
             data: revm::primitives::Bytes::from(calldata.0),
@@ -126,7 +126,7 @@ fn simulate() -> eyre::Result<()> {
     //////////////////////////
     {
         let calldata = abi.encode("sha512", (Token::Bytes("test".as_bytes().to_vec()),))?;
-        evm.context.env.tx = TxEnv {
+        evm.context.evm.inner.env.tx = TxEnv {
             caller: ADDR_A,
             transact_to: revm::primitives::TransactTo::Call(ADDR_B),
             data: revm::primitives::Bytes::from(calldata.0),
@@ -170,7 +170,7 @@ fn simulate() -> eyre::Result<()> {
             ]),),
         )?;
 
-        evm.context.env.tx = TxEnv {
+        evm.context.evm.inner.env.tx = TxEnv {
             caller: ADDR_A,
             transact_to: revm::primitives::TransactTo::Call(ADDR_B),
             data: revm::primitives::Bytes::from(calldata.0),

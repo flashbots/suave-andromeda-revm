@@ -1,15 +1,17 @@
 use lazy_static::lazy_static;
 use reqwest::blocking::Client as ReqwestClient;
+use reth_primitives::Bytes;
 use sha2::*;
 
 use ethers::abi::{encode, Bytes as AbiBytes, Contract, Token};
 use ethers::contract::{BaseContract, Lazy};
-use ethers::types::{Address, Bytes, H256};
+use ethers::types::{Address, H256};
 
-use revm::precompile::{
-    EnvPrecompileFn, Precompile, PrecompileError, PrecompileResult, PrecompileWithAddress,
+use revm::precompile::PrecompileWithAddress;
+use revm::primitives::{
+    Address as RevmAddress, Env, EnvPrecompileFn, Precompile, PrecompileError, PrecompileErrors,
+    PrecompileOutput, PrecompileResult,
 };
-use revm::primitives::{Address as RevmAddress, Env};
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -23,7 +25,7 @@ pub static SERVICES_MANAGER_ABI: Lazy<BaseContract> = Lazy::new(|| {
     BaseContract::from(contract)
 });
 
-pub const RUN: PrecompileWithAddress = PrecompileWithAddress::new(
+pub const RUN: PrecompileWithAddress = PrecompileWithAddress(
     u64_to_address(0x3507),
     Precompile::Env(run as EnvPrecompileFn),
 );
@@ -44,34 +46,34 @@ lazy_static! {
     static ref GLOBAL_SM: Mutex<ServicesManager> = Mutex::new(ServicesManager::new());
 }
 
-const INSTANTIATE_FAILED: PrecompileError =
-    PrecompileError::CustomPrecompileError("could not instantiate requested protocol");
-const INCORRECT_INPUTS: PrecompileError =
-    PrecompileError::CustomPrecompileError("incorrect inputs passed in");
-const SERIVCE_MISCONFIGURED: PrecompileError =
-    PrecompileError::CustomPrecompileError("service is misconfigured");
-const SERIVCE_REQUEST_FAILED: PrecompileError =
-    PrecompileError::CustomPrecompileError("request to service failed");
+const INSTANTIATE_FAILED: &'static str = "could not instantiate requested protocol";
+const INCORRECT_INPUTS: &'static str = "incorrect inputs passed in";
+const SERIVCE_MISCONFIGURED: &'static str = "service is misconfigured";
+const SERIVCE_REQUEST_FAILED: &'static str = "request to service failed";
 
-fn run(input: &[u8], gas_limit: u64, env: &Env) -> PrecompileResult {
+fn run(input: &Bytes, gas_limit: u64, env: &Env) -> PrecompileResult {
     if let Some(called_fn) = SERVICES_MANAGER_ABI.methods.get(&input[0..4]) {
         match called_fn.0.as_str() {
             "getService" => get_service(input, gas_limit, env),
             "callService" => call_service(input, gas_limit, env),
-            _ => Err(INCORRECT_INPUTS),
+            _ => Err(PrecompileErrors::Error(PrecompileError::Other(
+                INCORRECT_INPUTS.into(),
+            ))),
         }
     } else {
-        Err(INCORRECT_INPUTS)
+        Err(PrecompileErrors::Error(PrecompileError::Other(
+            INCORRECT_INPUTS.into(),
+        )))
     }
 }
 
-fn get_service(input: &[u8], gas_limit: u64, env: &Env) -> PrecompileResult {
+fn get_service(input: &Bytes, gas_limit: u64, env: &Env) -> PrecompileResult {
     let gas_used = 10000 as u64;
     if gas_used > gas_limit {
-        return Err(PrecompileError::OutOfGas);
+        return Err(PrecompileError::OutOfGas.into());
     }
 
-    let mut handle_bytes: Vec<u8> = Vec::from(input);
+    let mut handle_bytes: Vec<u8> = input.to_vec();
     handle_bytes.extend_from_slice(env.msg.caller.0.as_slice());
     let handle_hash = sha2::Sha256::digest(handle_bytes).to_vec();
     let contract_handle = H256::from_slice(&handle_hash);
@@ -82,27 +84,30 @@ fn get_service(input: &[u8], gas_limit: u64, env: &Env) -> PrecompileResult {
         .service_handles
         .contains_key(&contract_handle)
     {
-        return Ok((
+        return Ok(PrecompileOutput::new(
             gas_used,
             encode(&[
                 Token::Uint(ethers::types::U256::from(contract_handle.0)),
                 Token::String(String::new()),
-            ]),
+            ])
+            .into(),
         ));
     }
 
     // TODO: configure elsewhere
     let instantiate_resp_raw = send_to_requests_manager(input, "http://127.0.0.1:5605/");
     if let Err(_e) = instantiate_resp_raw {
-        return Err(INSTANTIATE_FAILED);
+        return Err(PrecompileErrors::Error(PrecompileError::Other(
+            INSTANTIATE_FAILED.into(),
+        )));
     };
 
     let instantiate_resp = instantiate_resp_raw.unwrap();
-    let (service_handle, err): (H256, Bytes) = SERVICES_MANAGER_ABI
+    let (service_handle, err): (H256, reth_primitives::bytes::Bytes) = SERVICES_MANAGER_ABI
         .decode_output("getService", &instantiate_resp)
-        .map_err(|_e| INSTANTIATE_FAILED)?;
+        .map_err(|_e| PrecompileErrors::Error(PrecompileError::Other(INSTANTIATE_FAILED.into())))?;
     if err.len() != 0 {
-        return Ok((gas_used, instantiate_resp));
+        return Ok(PrecompileOutput::new(gas_used, instantiate_resp.into()));
     }
 
     GLOBAL_SM
@@ -111,28 +116,31 @@ fn get_service(input: &[u8], gas_limit: u64, env: &Env) -> PrecompileResult {
         .service_handles
         .insert(contract_handle, (env.msg.caller, service_handle));
 
-    Ok((
+    Ok(PrecompileOutput::new(
         gas_used,
         encode(&[
             Token::Uint(ethers::types::U256::from(contract_handle.0)),
             Token::String(String::new()),
-        ]),
+        ])
+        .into(),
     ))
 }
 
-fn call_service(input: &[u8], gas_limit: u64, env: &Env) -> PrecompileResult {
+fn call_service(input: &Bytes, gas_limit: u64, env: &Env) -> PrecompileResult {
     let gas_used = 10000 as u64;
     if gas_used > gas_limit {
-        return Err(PrecompileError::OutOfGas);
+        return Err(PrecompileError::OutOfGas.into());
     }
 
     let (contract_handle, service_calldata): (H256, AbiBytes) = SERVICES_MANAGER_ABI
         .decode_input(input)
-        .map_err(|_e| INCORRECT_INPUTS)?;
+        .map_err(|_e| PrecompileErrors::Error(PrecompileError::Other(INCORRECT_INPUTS.into())))?;
 
     let locked_sm = GLOBAL_SM.lock().unwrap();
     let service_handle = match locked_sm.service_handles.get(&contract_handle) {
-        None => Err(SERIVCE_MISCONFIGURED),
+        None => Err(PrecompileErrors::Error(PrecompileError::Other(
+            SERIVCE_MISCONFIGURED.into(),
+        ))),
         Some(sh) => {
             if !sh.0.const_eq(&env.msg.caller) {
                 // TODO
@@ -156,18 +164,23 @@ fn call_service(input: &[u8], gas_limit: u64, env: &Env) -> PrecompileResult {
                 Token::Bytes(service_calldata),
             ),
         )
-        .map_err(|_e| INCORRECT_INPUTS)?;
+        .map_err(|_e| PrecompileErrors::Error(PrecompileError::Other(INCORRECT_INPUTS.into())))?;
 
     match send_to_requests_manager(&remapped_calldata.0, "http://127.0.0.1:5605/") {
-        Err(_e) => PrecompileResult::Err(SERIVCE_REQUEST_FAILED),
-        Ok(r) => PrecompileResult::Ok((gas_used, r)),
+        Err(_e) => PrecompileResult::Err(PrecompileErrors::Error(PrecompileError::Other(
+            SERIVCE_REQUEST_FAILED.into(),
+        ))),
+        Ok(r) => PrecompileResult::Ok(PrecompileOutput::new(gas_used, r.into())),
     }
 }
 
-fn send_to_requests_manager(input: &[u8], path: &str) -> reqwest::Result<Vec<u8>> {
+fn send_to_requests_manager(
+    input: &reth_primitives::bytes::Bytes,
+    path: &str,
+) -> reqwest::Result<Vec<u8>> {
     let client = ReqwestClient::new();
     // TODO: configure elsewhere
-    let res = client.post(path).body::<Vec<u8>>(input.into()).send()?;
+    let res = client.post(path).body::<Vec<u8>>(input.to_vec()).send()?;
 
     let resp_bytes = res.bytes()?;
     Ok(resp_bytes.into())

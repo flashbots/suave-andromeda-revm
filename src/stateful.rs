@@ -16,10 +16,8 @@ use helios::prelude::Block;
 use revm::{
     db::{CacheDB, EmptyDB},
     inspectors::TracerEip3155,
-    primitives::SpecId,
     primitives::{Address, B256, U256},
     primitives::{BlockEnv, CfgEnv, EVMError, Env, ExecutionResult, MsgEnv, TxEnv},
-    Transact,
 };
 
 use ethers::core::types::{Block as EthersBlock, BlockNumber, TxHash};
@@ -124,19 +122,11 @@ impl StatefulExecutor {
             }),
         }?;
 
-        let mut cfg = CfgEnv::default();
-        cfg.spec_id = SpecId::SHANGHAI;
-
-        let msg = MsgEnv {
-            caller: tx.caller.clone(),
-        };
-
-        let mut env = Env {
-            cfg,
-            msg,
+        let mut env = Box::new(Env {
             tx,
             block: block_env,
-        };
+            ..Default::default()
+        });
 
         let mut db = RemoteDB::new(
             self.rpc_state_provider.clone(),
@@ -146,12 +136,12 @@ impl StatefulExecutor {
         match match trace {
             true => {
                 let writer = Box::new(io::stderr());
-                let mut inspector = TracerEip3155::new(writer, true, true);
-                let mut evm_impl = new_andromeda_revm(&mut db, &mut env, Some(&mut inspector));
+                let mut inspector = TracerEip3155::new(writer);
+                let mut evm_impl = new_andromeda_revm(&mut db, env, Some(&mut inspector));
                 evm_impl.transact()
             }
             false => {
-                let mut evm_impl = new_andromeda_revm(&mut db, &mut env, None);
+                let mut evm_impl = new_andromeda_revm(&mut db, env, None);
                 evm_impl.transact()
             }
         } {

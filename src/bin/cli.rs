@@ -1,4 +1,4 @@
-pub use suave_andromeda_revm::{ethers_block_to_helios, RemoteDB};
+pub use suave_andromeda_revm::{ethers_block_to_helios, new_andromeda_revm, RemoteDB};
 
 use serde_json;
 
@@ -17,10 +17,7 @@ use ethers::core::types::BlockNumber;
 use ethers::providers::{Http, Provider};
 use std::convert::TryFrom;
 
-use revm::{
-    primitives::{EVMError, ExecutionResult, TxEnv},
-    EVM,
-};
+use revm::primitives::{EVMError, Env, ExecutionResult, TxEnv};
 
 use ethers::utils as ethers_utils;
 
@@ -87,10 +84,13 @@ async fn main() {
     );
 }
 
-fn execute_tx<DB: Database>(db: DB, tx: TxEnv) -> Result<ExecutionResult, EVMError<DB::Error>> {
-    let mut evm = EVM::new();
-    evm.database(db);
-    evm.env.tx = tx;
+fn execute_tx<DB: Database>(mut db: DB, tx: TxEnv) -> Result<ExecutionResult, EVMError<DB::Error>> {
+    let mut env = Box::new(Env {
+        tx,
+        ..Default::default()
+    });
+
+    let mut evm = new_andromeda_revm(&mut db, env, None);
     match evm.transact() {
         Ok(evm_res) => Ok(evm_res.result),
         Err(err) => Err(err),

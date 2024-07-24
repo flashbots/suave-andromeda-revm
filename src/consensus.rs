@@ -21,7 +21,7 @@ fn verify(block: &Block) -> Address {
     let header = extract_header(&block).unwrap();
 
     // TODO: can this kill the client if it recieves a malicous block?
-    let creator: Address = recover_header_signer(&header).unwrap_or_else(|| {
+    let creator: Address = recover_header_signer(&header).unwrap_or_else(|_| {
         panic!(
             "Failed to recover Clique Consensus signer from header ({}, {}) using extradata {}",
             header.number,
@@ -56,6 +56,7 @@ pub fn extract_header(block: &Block) -> Result<Header> {
         extra_data: block.extra_data.0.clone().into(),
         parent_beacon_block_root: None,
         blob_gas_used: None,
+        requests_root: None,
         excess_blob_gas: None,
     })
 }
