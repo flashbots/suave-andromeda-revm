@@ -4,8 +4,10 @@ use revm::precompile::Precompiles;
 
 use crate::precompiles::hash;
 use crate::precompiles::http;
+use crate::precompiles::p256;
 use crate::precompiles::services_manager;
 use crate::precompiles::sgxattest;
+use crate::precompiles::x509;
 
 pub fn andromeda_precompiles() -> &'static Precompiles {
     static INSTANCE: OnceBox<Precompiles> = OnceBox::new();
@@ -21,6 +23,12 @@ pub fn andromeda_precompiles() -> &'static Precompiles {
         precompiles
             .inner
             .extend(hash_precompiles().inner.clone().into_iter());
+        precompiles
+            .inner
+            .extend(p256_precompiles().inner.clone().into_iter());
+        precompiles
+            .inner
+            .extend(x509_precompiles().inner.clone().into_iter());
         precompiles
             .inner
             .extend(http_precompiles().inner.clone().into_iter());
@@ -70,6 +78,26 @@ pub fn http_precompiles() -> &'static Precompiles {
     INSTANCE.get_or_init(|| {
         let precompiles = Precompiles {
             inner: [http::HTTP_CALL].into(),
+        };
+        Box::new(precompiles)
+    })
+}
+
+pub fn x509_precompiles() -> &'static Precompiles {
+    static INSTANCE: OnceBox<Precompiles> = OnceBox::new();
+    INSTANCE.get_or_init(|| {
+        let precompiles = Precompiles {
+            inner: [x509::GENERATE_CERTIFICATE].into(),
+        };
+        Box::new(precompiles)
+    })
+}
+
+pub fn p256_precompiles() -> &'static Precompiles {
+    static INSTANCE: OnceBox<Precompiles> = OnceBox::new();
+    INSTANCE.get_or_init(|| {
+        let precompiles = Precompiles {
+            inner: [p256::ECMUL].into(),
         };
         Box::new(precompiles)
     })

@@ -44,6 +44,7 @@ fn simulate() -> eyre::Result<()> {
         "function sha512(bytes) returns (bytes)",
         "struct HttpRequest { string url; string method; string[] headers; bytes body; bool withFlashbotsSignature; }",
         "function doHTTPRequest(HttpRequest memory request) returns (bytes memory)",
+        "function generateX509(uint256 sk) returns (bytes memory)",
     ])?);
 
     //////////////////////////
@@ -183,6 +184,27 @@ fn simulate() -> eyre::Result<()> {
             .expect("invalid output encoding");
         assert_eq!(&outp, b"test test test");
         server.verify_and_clear();
+    }
+
+    {
+        let calldata = abi.encode(
+            "generateX509",
+            (Token::Uint("89ed108f0366a89aaf12be76d0136157ab5967efd30cd131fdf69d4176ea32fc".parse()?),),
+        )?;
+
+        evm.context.env.tx = TxEnv {
+            caller: ADDR_A,
+            transact_to: revm::primitives::TransactTo::Call(ADDR_B),
+            data: revm::primitives::Bytes::from(calldata.0),
+            ..Default::default()
+        };
+        let result = evm.transact()?;
+        let decoded = ethabi::decode(&[ethabi::ParamType::Bytes], dbg!(result.result.output().unwrap()))?;
+        let outp = decoded[0]
+            .clone()
+            .into_bytes()
+            .expect("invalid output encoding");
+        eprintln!("certificate: {}", ethers::types::Bytes::from(outp));
     }
 
     Ok(())

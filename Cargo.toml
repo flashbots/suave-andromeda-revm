@@ -37,6 +37,11 @@ tiny_http = "0.12.0"
 regex = "1.10.3"
 redis = { version = "0.24.0", features = ["tokio-comp", "connection-manager"] }
 httptest = "0.15.5"
+rcgen = "0.13.1"
+p256 = "0.13.2"
+
+[dev-dependencies]
+rustls-webpki = "0.102.5"
 
 [patch."https://github.com/bluealloy/revm"]
 revm = { git = "https://github.com/flashbots/revm.git", branch = "extensible-precompiles" }
