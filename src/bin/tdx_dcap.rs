@@ -6,22 +6,22 @@ use std::ffi;
 fn main() {
     let quote_bytes: Vec<u8> = Vec::from_hex(QUOTE_HEX).unwrap();
     let quote: *const u8 = quote_bytes.as_ptr();
-    let quoteSize: u32 = quote_bytes.len() as u32;
+    let quote_size: u32 = quote_bytes.len() as u32;
 
-    let pemPckCertificate = ffi::CString::new(PCK_CERT).unwrap();
-    let pckCrl = ffi::CString::new(PCK_CRL).unwrap();
+    let pem_pck_certificate = ffi::CString::new(PCK_CERT).unwrap();
+    let pck_crl = ffi::CString::new(PCK_CRL).unwrap();
 
-    let tcbInfoJson = ffi::CString::new(TCBINFO).unwrap();
-    let qeIdentityJson = ffi::CString::new(QE_IDENTITY).unwrap();
+    let tcb_info_json = ffi::CString::new(TCBINFO).unwrap();
+    let qe_identity_json = ffi::CString::new(QE_IDENTITY).unwrap();
 
     unsafe {
         let status = QuoteVerificationLibrary::sgxAttestationVerifyQuote(
             quote,
-            quoteSize,
-            pemPckCertificate.as_ptr(),
-            pckCrl.as_ptr(),
-            tcbInfoJson.as_ptr(),
-            qeIdentityJson.as_ptr(),
+            quote_size,
+            pem_pck_certificate.as_ptr(),
+            pck_crl.as_ptr(),
+            tcb_info_json.as_ptr(),
+            qe_identity_json.as_ptr(),
         );
         println!("{:?}", status);
     }

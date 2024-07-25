@@ -2,14 +2,14 @@
 pragma solidity ^0.8.8;
 
 contract Andromeda {
-    address public constant ATTEST_ADDR        = 0x0000000000000000000000000000000000040700;
-    address public constant VOLATILESET_ADDR   = 0x0000000000000000000000000000000000040701;
-    address public constant VOLATILEGET_ADDR   = 0x0000000000000000000000000000000000040702;
-    address public constant RANDOM_ADDR        = 0x0000000000000000000000000000000000040703;
-    address public constant TDX_DCAP_VERIFY    = 0x0000000000000000000000000000000000040800;
-    address public constant SHA512_ADDR        = 0x0000000000000000000000000000000000050700;
-    address public constant DO_HTTP_REQUEST    = 0x0000000000000000000000000000000043200002;
-    address public constant X509_GENERATE_ADDR = 0x0000000000000000000000000000000000070700;
+    address public constant ATTEST_ADDR           = 0x0000000000000000000000000000000000040700;
+    address public constant VOLATILESET_ADDR      = 0x0000000000000000000000000000000000040701;
+    address public constant VOLATILEGET_ADDR      = 0x0000000000000000000000000000000000040702;
+    address public constant RANDOM_ADDR           = 0x0000000000000000000000000000000000040703;
+    address public constant TDX_DCAP_VERIFY_QUOTE = 0x0000000000000000000000000000000000040800;
+    address public constant SHA512_ADDR           = 0x0000000000000000000000000000000000050700;
+    address public constant DO_HTTP_REQUEST       = 0x0000000000000000000000000000000043200002;
+    address public constant X509_GENERATE_ADDR    = 0x0000000000000000000000000000000000070700;
 
     function volatileSet(bytes32 key, bytes32 value) public view {
         bytes memory cdata = abi.encodePacked([key, value]);
@@ -38,8 +38,8 @@ contract Andromeda {
         return bytes32(randomBytes);
     }
 
-    function verifyTDXDCAPQuote(bytes memory quote, string memory pckCertPem, string memory pckCrlPem, string memory tcbInfoJson, string memory qeIdentityJson) external returns (uint) {
-        (bool success, bytes memory status) = TDX_DCAP_VERIFY.staticcall("");
+    function verifyTDXDCAPQuote(bytes memory quote, string memory pckCertPem, string memory pckCrlPem, string memory tcbInfoJson, string memory qeIdentityJson) public view returns (uint) {
+        (bool success, bytes memory status) = TDX_DCAP_VERIFY_QUOTE.staticcall(abi.encode(quote, pckCertPem, pckCrlPem, tcbInfoJson, qeIdentityJson));
         require(success);
         return abi.decode(status, (uint));
     }

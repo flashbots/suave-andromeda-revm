@@ -7,6 +7,7 @@ pub use stateful::{StatefulExecutor, StatefulExecutorConfig};
 pub mod consensus;
 
 #[cfg(feature = "tdx_dcap")]
+#[allow(non_snake_case)]
 mod SGX_TDX_DCAP_QuoteVerificationLibrary {
     pub mod lib;
 }

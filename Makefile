@@ -12,6 +12,11 @@ build:
 examples: contracts build
 	cargo run -p suave-andromeda-revm --example andromeda_test
 
+all-tests: contracts
+	cargo build --features all
+	cargo run -p suave-andromeda-revm --example andromeda_test --features all
+	cargo test --features all
+
 .PHONY: redis
 redis:
 	docker run --name services-manager-redis --rm -p 6379:6379 redis:alpine

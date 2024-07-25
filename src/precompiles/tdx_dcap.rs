@@ -5,86 +5,55 @@ use revm::precompile::{
 
 use std::ffi;
 
-use ethers::abi::{encode_packed, Detokenize, Function, Token};
-use ethers::types::H160;
-use ethers::utils::keccak256;
-use sha2::*;
-
-use lazy_static::lazy_static;
-use std::{collections::HashMap, sync::Mutex};
-use std::{fs, fs::File, io::Read, io::Write, path::Path};
+use alloy::{sol, sol_types::SolCall};
+use ethers::abi::{encode, Token};
+use reth_primitives::Bytes;
 
 use crate::{u64_to_address, QuoteVerificationLibrary};
 
-use ethers::abi::{encode, Bytes as AbiBytes, Contract};
-use ethers::contract::{BaseContract, Lazy};
-use ethers::types::{Address, H256};
-
-use reth_primitives::Bytes;
-use revm::primitives::{Address as RevmAddress, Env};
-
 pub const VERIFY_QUOTE: PrecompileWithAddress = PrecompileWithAddress(
     u64_to_address(0x40800),
-    Precompile::Standard(tgx_verify_quote_run as StandardPrecompileFn),
+    Precompile::Standard(tdx_verify_quote_run as StandardPrecompileFn),
 );
 
-// Redefined here to avoid having to import from external services
-pub static TDX_DCAP_ABI: Lazy<BaseContract> = Lazy::new(|| {
-    let contract: Contract =
-        serde_json::from_str(include_str!("../out/TdxDcap.sol/TDX_DCAP.abi.json")).unwrap();
-    BaseContract::from(contract)
-});
-
-pub static VERIFY_QUOTE_ABI: Lazy<Function> = Lazy::new(|| {
-    TDX_DCAP_ABI
-        .abi()
-        .function("verifyQuote")
-        .expect("verifyQuote signature not available in TDX DCAP abi")
-        .clone()
-});
+sol!(
+    #[allow(missing_docs)]
+    function verifyTDXDCAPQuote(bytes memory quote, string memory pckCertPem, string memory pckCrlPem, string memory tcbInfoJson, string memory qeIdentityJson) public view returns (uint status);
+);
 
 const INPUTS_TOO_BIG: &'static str = "inputs passed in are unreasonably big";
 const INCORRECT_INPUTS: &'static str = "incorrect inputs passed in";
 
-fn tgx_verify_quote_run(input: &Bytes, gas_limit: u64) -> PrecompileResult {
+fn tdx_verify_quote_run(input: &Bytes, gas_limit: u64) -> PrecompileResult {
     let gas_used = 10000 as u64;
     if gas_used > gas_limit {
         return Err(PrecompileError::OutOfGas.into());
     }
 
-    const max_quote_size: usize = 1 << 14; // 16kiB
-    if input.len() > max_quote_size {
+    const MAX_QUOTE_SIZE: usize = 1 << 14; // 16kiB
+    if input.len() > MAX_QUOTE_SIZE {
         return Err(PrecompileErrors::Error(PrecompileError::Other(
             INPUTS_TOO_BIG.into(),
         )));
     }
 
-    let (quote, pckCertPem, pckCrlPem, tcbInfoJson, qeIdentityJson): (
-        AbiBytes,
-        String,
-        String,
-        String,
-        String,
-    ) =
-        Detokenize::from_tokens(VERIFY_QUOTE_ABI.decode_input(input).map_err(|_e| {
-            PrecompileErrors::Error(PrecompileError::Other(INCORRECT_INPUTS.into()))
-        })?)
+    let decoded = verifyTDXDCAPQuoteCall::abi_decode_raw(input, true)
         .map_err(|_e| PrecompileErrors::Error(PrecompileError::Other(INCORRECT_INPUTS.into())))?;
 
-    let pckCertCstr = ffi::CString::new(pckCertPem).unwrap();
-    let pckCrlCstr = ffi::CString::new(pckCrlPem).unwrap();
+    let pck_cert_cstr = ffi::CString::new(decoded.pckCertPem).unwrap();
+    let pck_crl_cstr = ffi::CString::new(decoded.pckCrlPem).unwrap();
 
-    let tcbInfoCstr = ffi::CString::new(tcbInfoJson).unwrap();
-    let qeIdentityCstr = ffi::CString::new(qeIdentityJson).unwrap();
+    let tcb_info_cstr = ffi::CString::new(decoded.tcbInfoJson).unwrap();
+    let qe_identity_cstr = ffi::CString::new(decoded.qeIdentityJson).unwrap();
 
     unsafe {
         let status = QuoteVerificationLibrary::sgxAttestationVerifyQuote(
-            quote.as_ptr(),
-            quote.len() as u32,
-            pckCertCstr.as_ptr(),
-            pckCrlCstr.as_ptr(),
-            tcbInfoCstr.as_ptr(),
-            qeIdentityCstr.as_ptr(),
+            decoded.quote.as_ptr(),
+            decoded.quote.len() as u32,
+            pck_cert_cstr.as_ptr(),
+            pck_crl_cstr.as_ptr(),
+            tcb_info_cstr.as_ptr(),
+            qe_identity_cstr.as_ptr(),
         );
 
         return Ok(PrecompileOutput::new(
@@ -102,15 +71,17 @@ mod tests {
 
     #[test]
     fn verify_sample_quote() -> Result<(), String> {
-        let input = encode(&[
-            Token::Bytes(Vec::from_hex(QUOTE_HEX).unwrap()),
-            Token::String(PCK_CERT.to_string()),
-            Token::String(PCK_CRL.to_string()),
-            Token::String(TCB_INFO.to_string()),
-            Token::String(QE_IDENTITY.to_string()),
-        ]);
-        let res = tgx_verify_quote_run(&input.into(), 10000).expect("call did not succeed");
-        assert_eq!(res.bytes, encode(&[Token::Uint(U256::ZERO)]));
+        let call = verifyTDXDCAPQuoteCall {
+            quote: Vec::from_hex(QUOTE_HEX).unwrap().into(),
+            pckCertPem: PCK_CERT.to_string(),
+            pckCrlPem: PCK_CRL.to_string(),
+            tcbInfoJson: TCB_INFO.to_string(),
+            qeIdentityJson: QE_IDENTITY.to_string(),
+        };
+        let mut input = Vec::new();
+        call.abi_encode_raw(&mut input);
+        let res = tdx_verify_quote_run(&input.into(), 10000).expect("call did not succeed");
+        assert_eq!(res.bytes, encode(&[Token::Uint(0.into())]));
 
         // TODO: add a failing example (mismatch TCB, QEIdentity, invalid PCK)
 

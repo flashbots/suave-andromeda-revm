@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [features]
-external_services = []
 tdx_dcap = []
+external_services = []
 redis_external_services = ["external_services"]
 all = ["tdx_dcap", "external_services", "redis_external_services"]
 
@@ -50,7 +50,6 @@ rustls-webpki = "0.102.5"
 [patch."https://github.com/bluealloy/revm"]
 revm = { git = "https://github.com/flashbots/revm.git", branch = "v40-msg-caller" }
 revm-primitives = { git = "https://github.com/flashbots/revm.git", branch = "v40-msg-caller" }
-
 
 [[bin]]
 name = "tdx_dcap_demo"

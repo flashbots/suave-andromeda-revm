@@ -199,7 +199,7 @@ mod tests {
 
         let mut db = InMemoryDB::default();
 
-        let mut env = Box::new(Env::default());
+        let env = Box::new(Env::default());
 
         /* Deploy the contract */
 
