@@ -6,6 +6,14 @@ pub mod stateful;
 pub use stateful::{StatefulExecutor, StatefulExecutorConfig};
 pub mod consensus;
 
+#[cfg(feature = "tdx_dcap")]
+#[allow(non_snake_case)]
+mod SGX_TDX_DCAP_QuoteVerificationLibrary {
+    pub mod lib;
+}
+#[cfg(feature = "tdx_dcap")]
+pub use SGX_TDX_DCAP_QuoteVerificationLibrary::lib as QuoteVerificationLibrary;
+
 pub mod evm;
 pub use evm::{new_andromeda_revm, new_andromeda_revm_wi};
 
@@ -16,6 +24,8 @@ pub mod precompiles {
     pub mod p256;
     pub mod services_manager;
     pub mod sgxattest;
+    #[cfg(feature = "tdx_dcap")]
+    pub mod tdx_dcap;
     pub mod x509;
 }
 

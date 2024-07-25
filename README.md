@@ -13,6 +13,7 @@ The Andromeda [precompiles](src/precompiles/) rely on features from Gramine, pro
 - `Suave.volatile{Set/Get}` uses a simple static `HashMap` in local memory. It does not persist through a service restart.
 - `Suave.attestSgx` uses [Gramine's remote attestation `/dev/attestation/quote`](https://gramine.readthedocs.io/en/stable/devel/features.html#attestation).
 - `Suave.sealingKey` uses [Gramine's pseudo-directory `/dev/attestation/keys`](https://gramine.readthedocs.io/en/stable/devel/features.html#attestation) feature.
+- `Suave.verifyTDXDCAPQuote` uses [intel/SGX-TDX-DCAP-QuoteVerificationLibrary](https://github.com/intel/SGX-TDX-DCAP-QuoteVerificationLibrary/).
 
 As additional utility precompiles we include:
 - `Suave.doHTTPRequest`, which uses `/etc/ssl/ca-certificates.crt` for HTTPS certificates (the file must be included in the Gramine manifest!).
